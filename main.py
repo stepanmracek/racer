@@ -97,7 +97,7 @@ class Car:
             self.velocity = min(self.velocity + self.acceleration, self.max_velocity)
         else:
             # breaking when reversing
-            self.velocity = max(self.velocity + self.acceleration * 2, 0)
+            self.velocity = min(self.velocity + self.acceleration * 2.0, 0.0)
 
     def backward(self):
         if self.bounced_recently():
@@ -105,11 +105,11 @@ class Car:
 
         if self.velocity > 0:
             # breaking when moving forward
-            self.velocity = max(self.velocity - self.acceleration * 2, 0)
+            self.velocity = max(self.velocity - self.acceleration * 2.0, 0.0)
         else:
             # accelerating when reversing
-            self.velocity = min(
-                self.velocity - self.acceleration, self.max_velocity / 2
+            self.velocity = max(
+                self.velocity - self.acceleration, -self.max_velocity / 2.0
             )
 
     def step(self):
