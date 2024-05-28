@@ -1,15 +1,15 @@
 import math
 from dataclasses import dataclass, field
 
-import pygame
+import pygame as pg
 
 
 def scale_image(img, factor):
     size = round(img.get_width() * factor), round(img.get_height() * factor)
-    return pygame.transform.smoothscale(img, size)
+    return pg.transform.smoothscale(img, size)
 
 
-def background_tile(win: pygame.Surface, background: pygame.Surface):
+def background_tile(win: pg.Surface, background: pg.Surface):
     w, h = win.get_width(), win.get_height()
     bgnd_w, bgnd_h = background.get_width(), background.get_height()
     rows = math.ceil(w / bgnd_w)
@@ -22,7 +22,7 @@ def background_tile(win: pygame.Surface, background: pygame.Surface):
 
 @dataclass
 class Car:
-    img: pygame.Surface
+    img: pg.Surface
     x: float
     y: float
     angle: int
@@ -31,19 +31,19 @@ class Car:
     rotation_velocity: int = 2
     acceleration: float = 0.1
 
-    images: dict[int, pygame.Surface] = field(init=False)
-    masks: dict[int, pygame.mask.Mask] = field(init=False)
-    crash_sound: pygame.mixer.Sound = field(init=False)
+    images: dict[int, pg.Surface] = field(init=False)
+    masks: dict[int, pg.mask.Mask] = field(init=False)
+    crash_sound: pg.mixer.Sound = field(init=False)
 
     def __post_init__(self):
         self.images = {
-            angle: pygame.transform.rotate(self.img, angle)
+            angle: pg.transform.rotate(self.img, angle)
             for angle in range(0, 360, self.rotation_velocity)
         }
         self.masks = {
-            angle: pygame.mask.from_surface(img) for angle, img in self.images.items()
+            angle: pg.mask.from_surface(img) for angle, img in self.images.items()
         }
-        self.crash_sound = pygame.mixer.Sound("assets/sound/crash.mp3")
+        self.crash_sound = pg.mixer.Sound("assets/sound/crash.mp3")
         self.crash_sound.set_volume(0.5)
         self.init_vals = {
             "x": self.x,
@@ -58,7 +58,7 @@ class Car:
         self.velocity = self.init_vals["velocity"]
         self.angle = self.init_vals["angle"]
 
-    def draw(self, win: pygame.Surface):
+    def draw(self, win: pg.Surface):
         img = self.images[self.angle]
         r = img.get_rect()
         win.blit(img, (self.x - r.centerx, self.y - r.centery))
@@ -98,21 +98,23 @@ class Car:
 
     def step(
         self,
-        pressed_keys: pygame.key.ScancodeWrapper,
-        collision_mask: pygame.Mask,
+        pressed_keys: pg.key.ScancodeWrapper,
+        collision_mask: pg.Mask,
         up_key: int,
         down_key: int,
         left_key: int,
         right_key: int,
         other_car: "Car",
         diamond_coords: set[tuple[int, int]],
-        diamond_mask: pygame.mask.Mask,
-        diamond_sfx: pygame.mixer.Sound,
+        diamond_mask: pg.mask.Mask,
+        diamond_sfx: pg.mixer.Sound,
     ):
         self.control(pressed_keys, up_key, down_key, left_key, right_key)
         new_pos = self.get_next_pos()
 
-        if self.collision(new_pos, collision_mask) or self.collision_other_car(new_pos, other_car):
+        if self.collision(new_pos, collision_mask) or self.collision_other_car(
+            new_pos, other_car
+        ):
             self.bounce()
             return
 
@@ -137,9 +139,7 @@ class Car:
         elif self.velocity < 0:
             self.velocity = min(self.velocity + self.acceleration * 0.25, 0.0)
 
-    def collision(
-        self, candidate_pos: tuple[float, float], mask: pygame.Mask, x=0, y=0
-    ):
+    def collision(self, candidate_pos: tuple[float, float], mask: pg.Mask, x=0, y=0):
         img = self.images[self.angle]
         car_mask = self.masks[self.angle]
         r = img.get_rect()
@@ -169,7 +169,7 @@ class Car:
 
     def control(
         self,
-        pressed_keys: pygame.key.ScancodeWrapper,
+        pressed_keys: pg.key.ScancodeWrapper,
         up_key: int,
         down_key: int,
         left_key: int,
@@ -204,11 +204,11 @@ def init_diamonds():
 
 @dataclass
 class World:
-    background: pygame.Surface
-    map: pygame.Surface
+    background: pg.Surface
+    map: pg.Surface
     blue_car: Car
     red_car: Car
-    diamond_image: pygame.Surface
+    diamond_image: pg.Surface
     diamond_coords: set[tuple[int, int]]
 
     def reset(self):
@@ -216,26 +216,26 @@ class World:
         self.blue_car.reset()
         self.diamond_coords = init_diamonds()
 
-    def draw(self, win: pygame.Surface):
+    def draw(self, win: pg.Surface):
         win.blit(self.background, (0, 0))
         win.blit(self.map, (0, 0))
         for diamond_pos in self.diamond_coords:
             win.blit(self.diamond_image, diamond_pos)
         self.red_car.draw(win)
         self.blue_car.draw(win)
-        pygame.display.update()
+        pg.display.update()
 
 
 def main():
-    pygame.init()
-    RED_CAR = scale_image(pygame.image.load("assets/cars/red.png"), 0.75)
-    BLUE_CAR = scale_image(pygame.image.load("assets/cars/blue.png"), 0.75)
-    GRASS = pygame.image.load("assets/grass-fullhd.png")
-    COLLISION = pygame.image.load("assets/collision-test.png")
-    COLLISION_MASK = pygame.mask.from_surface(COLLISION)
-    DIAMOND = pygame.image.load("assets/diamond.png")
-    DIAMOND_MASK = pygame.mask.from_surface(DIAMOND)
-    DIAMOND_SFX = pygame.mixer.Sound("assets/sound/money.mp3")
+    pg.init()
+    RED_CAR = scale_image(pg.image.load("assets/cars/red.png"), 0.75)
+    BLUE_CAR = scale_image(pg.image.load("assets/cars/blue.png"), 0.75)
+    GRASS = pg.image.load("assets/grass-fullhd.png")
+    COLLISION = pg.image.load("assets/collision-test.png")
+    COLLISION_MASK = pg.mask.from_surface(COLLISION)
+    DIAMOND = pg.image.load("assets/diamond.png")
+    DIAMOND_MASK = pg.mask.from_surface(DIAMOND)
+    DIAMOND_SFX = pg.mixer.Sound("assets/sound/money.mp3")
 
     world = World(
         background=GRASS,
@@ -245,29 +245,29 @@ def main():
         diamond_image=DIAMOND,
         diamond_coords=init_diamonds(),
     )
-    win = pygame.display.set_mode((1280, 768))
-    pygame.display.set_caption("Racer")
-    clock = pygame.time.Clock()
+    win = pg.display.set_mode((1280, 768))
+    pg.display.set_caption("Racer")
+    clock = pg.time.Clock()
 
     while True:
         clock.tick(30)
 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
                 return
 
-        pressed_keys = pygame.key.get_pressed()
+        pressed_keys = pg.key.get_pressed()
 
-        if pressed_keys[pygame.K_r]:
+        if pressed_keys[pg.K_r]:
             world.reset()
 
         world.red_car.step(
             pressed_keys=pressed_keys,
             collision_mask=COLLISION_MASK,
-            up_key=pygame.K_UP,
-            down_key=pygame.K_DOWN,
-            left_key=pygame.K_LEFT,
-            right_key=pygame.K_RIGHT,
+            up_key=pg.K_UP,
+            down_key=pg.K_DOWN,
+            left_key=pg.K_LEFT,
+            right_key=pg.K_RIGHT,
             other_car=world.blue_car,
             diamond_coords=world.diamond_coords,
             diamond_mask=DIAMOND_MASK,
@@ -276,10 +276,10 @@ def main():
         world.blue_car.step(
             pressed_keys=pressed_keys,
             collision_mask=COLLISION_MASK,
-            up_key=pygame.K_w,
-            down_key=pygame.K_s,
-            left_key=pygame.K_a,
-            right_key=pygame.K_d,
+            up_key=pg.K_w,
+            down_key=pg.K_s,
+            left_key=pg.K_a,
+            right_key=pg.K_d,
             other_car=world.red_car,
             diamond_coords=world.diamond_coords,
             diamond_mask=DIAMOND_MASK,
@@ -291,4 +291,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-    pygame.quit()
+    pg.quit()
