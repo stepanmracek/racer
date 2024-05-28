@@ -32,12 +32,16 @@ class Car:
     acceleration: float = 0.1
 
     images: dict[int, pygame.Surface] = field(init=False)
+    masks: dict[int, pygame.mask.Mask] = field(init=False)
     crash_sound: pygame.mixer.Sound = field(init=False)
 
     def __post_init__(self):
         self.images = {
             angle: pygame.transform.rotate(self.img, angle)
             for angle in range(0, 360, self.rotation_velocity)
+        }
+        self.masks = {
+            angle: pygame.mask.from_surface(img) for angle, img in self.images.items()
         }
         self.crash_sound = pygame.mixer.Sound("assets/sound/crash.mp3")
         self.crash_sound.set_volume(0.5)
@@ -137,21 +141,18 @@ class Car:
         self, candidate_pos: tuple[float, float], mask: pygame.Mask, x=0, y=0
     ):
         img = self.images[self.angle]
-        car_mask = pygame.mask.from_surface(img)
+        car_mask = self.masks[self.angle]
         r = img.get_rect()
         offset = (candidate_pos[0] - r.centerx - x, candidate_pos[1] - r.centery - y)
-        ans = mask.overlap(car_mask, offset)
-        if ans:
-            print(ans)
-        return ans
+        return mask.overlap(car_mask, offset)
 
     def collision_other_car(self, candidate_pos: tuple[float, float], other_car: "Car"):
         this_img = self.images[self.angle]
-        this_mask = pygame.mask.from_surface(this_img)
+        this_mask = self.masks[self.angle]
         this_r = this_img.get_rect()
 
         other_img = other_car.images[other_car.angle]
-        other_mask = pygame.mask.from_surface(other_img)
+        other_mask = other_car.masks[other_car.angle]
         other_r = other_img.get_rect()
 
         offset = (
