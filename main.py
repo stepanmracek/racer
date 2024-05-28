@@ -9,17 +9,6 @@ def scale_image(img, factor):
     return pg.transform.smoothscale(img, size)
 
 
-def background_tile(win: pg.Surface, background: pg.Surface):
-    w, h = win.get_width(), win.get_height()
-    bgnd_w, bgnd_h = background.get_width(), background.get_height()
-    rows = math.ceil(w / bgnd_w)
-    cols = math.ceil(h / bgnd_h)
-
-    for r in range(rows):
-        for c in range(cols):
-            win.blit(background, (r * bgnd_w, c * bgnd_h))
-
-
 @dataclass
 class Car:
     img: pg.Surface
