@@ -1,5 +1,4 @@
 import math
-import time
 from dataclasses import dataclass, field
 
 import pygame
@@ -31,7 +30,6 @@ class Car:
     max_velocity: float = 10.0
     rotation_velocity: int = 2
     acceleration: float = 0.1
-    last_bounce = -1.0
 
     images: dict[int, pygame.Surface] = field(init=False)
     crash_sound: pygame.mixer.Sound = field(init=False)
@@ -61,37 +59,23 @@ class Car:
         r = img.get_rect()
         win.blit(img, (self.x - r.centerx, self.y - r.centery))
 
-    def bounced_recently(self):
-        return (time.perf_counter() - self.last_bounce) < 0.5 and abs(
-            self.velocity
-        ) > 0.1
-
     def left(self):
-        if self.bounced_recently():
-            return
-
         if self.velocity > 0.05:
             self.angle += self.rotation_velocity
         elif self.velocity < -0.05:
             self.angle -= self.rotation_velocity
 
-        self.angle = (self.angle + 360) % 360
+        self.angle = self.angle % 360
 
     def right(self):
-        if self.bounced_recently():
-            return
-
         if self.velocity > 0.01:
             self.angle -= self.rotation_velocity
         elif self.velocity < -0.01:
             self.angle += self.rotation_velocity
 
-        self.angle = (self.angle + 360) % 360
+        self.angle = self.angle % 360
 
     def forward(self):
-        if self.bounced_recently():
-            return
-
         if self.velocity >= 0:
             # accelerating forward
             self.velocity = min(self.velocity + self.acceleration, self.max_velocity)
@@ -100,24 +84,48 @@ class Car:
             self.velocity = min(self.velocity + self.acceleration * 2.0, 0.0)
 
     def backward(self):
-        if self.bounced_recently():
-            return
-
         if self.velocity > 0:
             # breaking when moving forward
             self.velocity = max(self.velocity - self.acceleration * 2.0, 0.0)
         else:
             # accelerating when reversing
-            self.velocity = max(
-                self.velocity - self.acceleration, -self.max_velocity / 2.0
-            )
+            max_reverse_speed = -self.max_velocity / 2.0
+            self.velocity = max(self.velocity - self.acceleration, max_reverse_speed)
 
-    def step(self):
+    def step(
+        self,
+        pressed_keys: pygame.key.ScancodeWrapper,
+        collision_mask: pygame.Mask,
+        up_key: int,
+        down_key: int,
+        left_key: int,
+        right_key: int,
+        other_car: "Car",
+        diamond_coords: set[tuple[int, int]],
+        diamond_mask: pygame.mask.Mask,
+        diamond_sfx: pygame.mixer.Sound,
+    ):
+        self.control(pressed_keys, up_key, down_key, left_key, right_key)
+        new_pos = self.get_next_pos()
+
+        if self.collision(new_pos, collision_mask) or self.collision_other_car(new_pos, other_car):
+            self.bounce()
+            return
+
+        for diamond in diamond_coords:
+            if self.collision(new_pos, diamond_mask, *diamond):
+                diamond_coords.remove(diamond)
+                diamond_sfx.play()
+                break
+
+        self.x = new_pos[0]
+        self.y = new_pos[1]
+
+    def get_next_pos(self) -> tuple[float, float]:
         radians = math.radians(self.angle)
         vertical = math.cos(radians) * self.velocity
         horizontal = math.sin(radians) * self.velocity
-        self.y -= vertical
-        self.x -= horizontal
+        return self.x - horizontal, self.y - vertical
 
     def idle(self):
         if self.velocity > 0:
@@ -125,14 +133,19 @@ class Car:
         elif self.velocity < 0:
             self.velocity = min(self.velocity + self.acceleration * 0.25, 0.0)
 
-    def collision(self, mask: pygame.Mask, x=0, y=0):
+    def collision(
+        self, candidate_pos: tuple[float, float], mask: pygame.Mask, x=0, y=0
+    ):
         img = self.images[self.angle]
         car_mask = pygame.mask.from_surface(img)
         r = img.get_rect()
-        offset = (self.x - r.centerx - x, self.y - r.centery - y)
-        return mask.overlap(car_mask, offset)
+        offset = (candidate_pos[0] - r.centerx - x, candidate_pos[1] - r.centery - y)
+        ans = mask.overlap(car_mask, offset)
+        if ans:
+            print(ans)
+        return ans
 
-    def collision_other_car(self, other_car: "Car"):
+    def collision_other_car(self, candidate_pos: tuple[float, float], other_car: "Car"):
         this_img = self.images[self.angle]
         this_mask = pygame.mask.from_surface(this_img)
         this_r = this_img.get_rect()
@@ -142,23 +155,38 @@ class Car:
         other_r = other_img.get_rect()
 
         offset = (
-            (self.x - this_r.centerx) - (other_car.x - other_r.centerx),
-            (self.y - this_r.centery) - (other_car.y - other_r.centery),
+            (candidate_pos[0] - this_r.centerx) - (other_car.x - other_r.centerx),
+            (candidate_pos[1] - this_r.centery) - (other_car.y - other_r.centery),
         )
         return other_mask.overlap(this_mask, offset)
 
     def bounce(self):
-        if self.bounced_recently():
-            return
-
         if abs(self.velocity) > 1.0:
             self.crash_sound.play()
 
-        self.last_bounce = time.perf_counter()
-        self.velocity = -0.25 * self.velocity
+        self.velocity = -0.5 * self.velocity
 
-        if abs(self.velocity) > 0.1 and abs(self.velocity) < 1.0:
-            self.velocity = 1.0 if self.velocity > 0 else -1.0
+    def control(
+        self,
+        pressed_keys: pygame.key.ScancodeWrapper,
+        up_key: int,
+        down_key: int,
+        left_key: int,
+        right_key: int,
+    ):
+        moved = False
+        if pressed_keys[left_key]:
+            self.left()
+        if pressed_keys[right_key]:
+            self.right()
+        if pressed_keys[up_key]:
+            moved = True
+            self.forward()
+        if pressed_keys[down_key]:
+            moved = True
+            self.backward()
+        if not moved:
+            self.idle()
 
 
 def init_diamonds():
@@ -173,32 +201,28 @@ def init_diamonds():
     }
 
 
-def car_control(
-    pressed_keys: pygame.key.ScancodeWrapper,
-    collision_mask: pygame.Mask,
-    car: Car,
-    other_car: Car,
-    up_key: int,
-    down_key: int,
-    left_key: int,
-    right_key: int,
-):
-    moved = False
-    if pressed_keys[left_key]:
-        car.left()
-    if pressed_keys[right_key]:
-        car.right()
-    if pressed_keys[up_key]:
-        moved = True
-        car.forward()
-    if pressed_keys[down_key]:
-        moved = True
-        car.backward()
-    if not moved:
-        car.idle()
+@dataclass
+class World:
+    background: pygame.Surface
+    map: pygame.Surface
+    blue_car: Car
+    red_car: Car
+    diamond_image: pygame.Surface
+    diamond_coords: set[tuple[int, int]]
 
-    if car.collision(collision_mask) or car.collision_other_car(other_car):
-        car.bounce()
+    def reset(self):
+        self.red_car.reset()
+        self.blue_car.reset()
+        self.diamond_coords = init_diamonds()
+
+    def draw(self, win: pygame.Surface):
+        win.blit(self.background, (0, 0))
+        win.blit(self.map, (0, 0))
+        for diamond_pos in self.diamond_coords:
+            win.blit(self.diamond_image, diamond_pos)
+        self.red_car.draw(win)
+        self.blue_car.draw(win)
+        pygame.display.update()
 
 
 def main():
@@ -212,23 +236,20 @@ def main():
     DIAMOND_MASK = pygame.mask.from_surface(DIAMOND)
     DIAMOND_SFX = pygame.mixer.Sound("assets/sound/money.mp3")
 
+    world = World(
+        background=GRASS,
+        map=COLLISION,
+        blue_car=Car(BLUE_CAR, 640, 200, 180),
+        red_car=Car(RED_CAR, 640, 600, 0),
+        diamond_image=DIAMOND,
+        diamond_coords=init_diamonds(),
+    )
     win = pygame.display.set_mode((1280, 768))
     pygame.display.set_caption("Racer")
     clock = pygame.time.Clock()
-    red_car = Car(RED_CAR, 640, 600, 0)
-    blue_car = Car(BLUE_CAR, 640, 200, 180)
-    diamonds = init_diamonds()
 
     while True:
         clock.tick(30)
-
-        win.blit(GRASS, (0, 0))
-        win.blit(COLLISION, (0, 0))
-        for diamond in diamonds:
-            win.blit(DIAMOND, diamond)
-        red_car.draw(win)
-        blue_car.draw(win)
-        pygame.display.update()
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -237,41 +258,34 @@ def main():
         pressed_keys = pygame.key.get_pressed()
 
         if pressed_keys[pygame.K_r]:
-            red_car.reset()
-            blue_car.reset()
-            diamonds = init_diamonds()
+            world.reset()
 
-        car_control(
-            pressed_keys,
-            COLLISION_MASK,
-            red_car,
-            blue_car,
-            pygame.K_UP,
-            pygame.K_DOWN,
-            pygame.K_LEFT,
-            pygame.K_RIGHT,
+        world.red_car.step(
+            pressed_keys=pressed_keys,
+            collision_mask=COLLISION_MASK,
+            up_key=pygame.K_UP,
+            down_key=pygame.K_DOWN,
+            left_key=pygame.K_LEFT,
+            right_key=pygame.K_RIGHT,
+            other_car=world.blue_car,
+            diamond_coords=world.diamond_coords,
+            diamond_mask=DIAMOND_MASK,
+            diamond_sfx=DIAMOND_SFX,
         )
-        car_control(
-            pressed_keys,
-            COLLISION_MASK,
-            blue_car,
-            red_car,
-            pygame.K_w,
-            pygame.K_s,
-            pygame.K_a,
-            pygame.K_d,
+        world.blue_car.step(
+            pressed_keys=pressed_keys,
+            collision_mask=COLLISION_MASK,
+            up_key=pygame.K_w,
+            down_key=pygame.K_s,
+            left_key=pygame.K_a,
+            right_key=pygame.K_d,
+            other_car=world.red_car,
+            diamond_coords=world.diamond_coords,
+            diamond_mask=DIAMOND_MASK,
+            diamond_sfx=DIAMOND_SFX,
         )
 
-        for diamond in diamonds:
-            if red_car.collision(DIAMOND_MASK, *diamond) or blue_car.collision(
-                DIAMOND_MASK, *diamond
-            ):
-                diamonds.remove(diamond)
-                DIAMOND_SFX.play()
-                break
-
-        red_car.step()
-        blue_car.step()
+        world.draw(win)
 
 
 if __name__ == "__main__":
