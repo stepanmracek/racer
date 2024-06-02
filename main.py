@@ -194,7 +194,7 @@ def init_diamonds():
 @dataclass
 class World:
     background: pg.Surface
-    map: pg.Surface
+    collision: pg.Surface
     blue_car: Car
     red_car: Car
     diamond_image: pg.Surface
@@ -207,7 +207,7 @@ class World:
 
     def draw(self, win: pg.Surface):
         win.blit(self.background, (0, 0))
-        win.blit(self.map, (0, 0))
+        win.blit(self.collision, (0, 0))
         for diamond_pos in self.diamond_coords:
             win.blit(self.diamond_image, diamond_pos)
         self.red_car.draw(win)
@@ -228,7 +228,7 @@ def main():
 
     world = World(
         background=GRASS,
-        map=COLLISION,
+        collision=COLLISION,
         blue_car=Car(BLUE_CAR, 640, 200, 180),
         red_car=Car(RED_CAR, 640, 600, 0),
         diamond_image=DIAMOND,
