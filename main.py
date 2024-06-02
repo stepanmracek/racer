@@ -1,5 +1,6 @@
 import math
 from dataclasses import dataclass, field
+from tqdm import tqdm
 
 import pygame as pg
 
@@ -21,8 +22,9 @@ class Car:
     acceleration: float = 0.1
 
     images: dict[int, pg.Surface] = field(init=False)
-    masks: dict[int, pg.mask.Mask] = field(init=False)
+    masks: dict[int, pg.Mask] = field(init=False)
     crash_sound: pg.mixer.Sound = field(init=False)
+    sensors_mask: dict[int, pg.Mask] = field(init=False)
 
     def __post_init__(self):
         self.images = {
@@ -32,6 +34,25 @@ class Car:
         self.masks = {
             angle: pg.mask.from_surface(img) for angle, img in self.images.items()
         }
+
+        self.sensors_mask = {}
+        sensors_img = pg.Surface((1000, 1000), pg.SRCALPHA)
+        sensors_img.fill((0, 0, 0, 0))
+        pg.draw.ellipse(sensors_img, (0, 0, 0, 255), (250, 0, 500, 750))
+        for angle in tqdm(
+            range(0, 360, self.rotation_velocity), desc="Pre-computing sensors mask"
+        ):
+            rotated_sensors_img = pg.transform.rotate(sensors_img, angle)
+            rotated_sensors_img = rotated_sensors_img.subsurface(
+                (
+                    rotated_sensors_img.get_width() / 2 - 500,
+                    rotated_sensors_img.get_height() / 2 - 500,
+                    1000,
+                    1000,
+                )
+            )
+            self.sensors_mask[angle] = pg.mask.from_surface(rotated_sensors_img)
+
         self.crash_sound = pg.mixer.Sound("assets/sound/crash.mp3")
         self.crash_sound.set_volume(0.5)
         self.init_vals = {
@@ -95,7 +116,7 @@ class Car:
         right_key: int,
         other_car: "Car",
         diamond_coords: set[tuple[int, int]],
-        diamond_mask: pg.mask.Mask,
+        diamond_mask: pg.Mask,
         diamond_sfx: pg.mixer.Sound,
     ):
         self.control(pressed_keys, up_key, down_key, left_key, right_key)
@@ -195,6 +216,7 @@ def init_diamonds():
 class World:
     background: pg.Surface
     collision: pg.Surface
+    collision_mask: pg.Mask
     blue_car: Car
     red_car: Car
     diamond_image: pg.Surface
@@ -208,10 +230,109 @@ class World:
     def draw(self, win: pg.Surface):
         win.blit(self.background, (0, 0))
         win.blit(self.collision, (0, 0))
+
+        # dhw = self.diamond_image.get_width()/2
+        # dhh = self.diamond_image.get_height()/2
         for diamond_pos in self.diamond_coords:
+            # win.blit(self.diamond_image, (diamond_pos[0] - dhw, diamond_pos[1] - dhh))
             win.blit(self.diamond_image, diamond_pos)
         self.red_car.draw(win)
         self.blue_car.draw(win)
+
+        m: pg.Mask = self.red_car.sensors_mask[self.red_car.angle]
+        win.blit(
+            m.to_surface(setcolor=(0, 0, 0, 64), unsetcolor=(0, 0, 0, 0)),
+            (self.red_car.x - 500, self.red_car.y - 500),
+        )
+
+        # wall collisions
+        readings = [None for _ in range(0, 360, 15)]
+        collisions = m.overlap_mask(
+            self.collision_mask, (-self.red_car.x + 500, -self.red_car.y + 500)
+        )
+        for i, a in enumerate(range(0, 360, 15)):
+            radians = math.radians(self.red_car.angle + a)
+            dy = -math.cos(radians)
+            dx = -math.sin(radians)
+            dh = math.hypot(dx, dy)
+            distance = 0.0
+            x = 500.0
+            y = 500.0
+            pg.draw.line(
+                win,
+                (128, 128, 128),
+                (self.red_car.x, self.red_car.y),
+                (self.red_car.x + dx * 500, self.red_car.y + dy * 500),
+            )
+            while distance < 1000:
+                x = x + dx
+                y = y + dy
+                distance += dh
+                if (
+                    x >= 0
+                    and y >= 0
+                    and x < 1000
+                    and y < 1000
+                    and collisions.get_at((x, y))
+                ):
+                    readings[i] = ("w", distance)
+                    break
+
+        # other car in range?
+        x = int(self.blue_car.x - self.red_car.x) + 500
+        y = int(self.blue_car.y - self.red_car.y) + 500
+        if x >= 0 and y >= 0 and x < 1000 and y < 1000 and m.get_at((x, y)):
+            x -= 500
+            y -= 500
+            distance = int(math.hypot(x, y))
+            # pg.draw.line(win, (0,0,0), (self.red_car.x - 250, self.red_car.y), (self.red_car.x + 250, self.red_car.y))
+            # pg.draw.line(win, (0,0,0), (self.red_car.x, self.red_car.y - 250), (self.red_car.x, self.red_car.y + 250))
+            angle = (
+                (-(self.red_car.angle - (90 - math.degrees(math.atan2(-y, -x))))) + 7.5
+            ) % 360
+            slot = int(angle // 15)
+            print(angle, slot)
+            if not readings[slot] or distance < readings[slot][1]:
+                readings[slot] = ("e", distance)
+
+        # diamonds in range?
+        for diamond_pos in self.diamond_coords:
+            x = int(diamond_pos[0] - self.red_car.x) + 500
+            y = int(diamond_pos[1] - self.red_car.y) + 500
+            if x >= 0 and y >= 0 and x < 1000 and y < 1000 and m.get_at((x, y)):
+                x -= 500
+                y -= 500
+                distance = int(math.hypot(x, y))
+                # pg.draw.line(win, (0,0,0), (self.red_car.x - 250, self.red_car.y), (self.red_car.x + 250, self.red_car.y))
+                # pg.draw.line(win, (0,0,0), (self.red_car.x, self.red_car.y - 250), (self.red_car.x, self.red_car.y + 250))
+                angle = (
+                    (-(self.red_car.angle - (90 - math.degrees(math.atan2(-y, -x)))))
+                    + 7.5
+                ) % 360
+                slot = int(angle // 15)
+                if not readings[slot] or distance < readings[slot][1]:
+                    readings[slot] = ("d", distance)
+
+        # draw readings
+        what_color = {
+            "w": (255, 255, 0),
+            "e": (255, 0, 0),
+            "d": (0, 0, 255),
+        }
+        for i, r in enumerate(readings):
+            if not r:
+                continue
+            what, distance = r
+            radians = math.radians(self.red_car.angle + i * 15)
+            dy = -math.cos(radians)
+            dx = -math.sin(radians)
+            pg.draw.circle(
+                win,
+                what_color[what],
+                (self.red_car.x + dx * distance, self.red_car.y + dy * distance),
+                3 if what == "w" else 5,
+            )
+
         pg.display.update()
 
 
@@ -229,6 +350,7 @@ def main():
     world = World(
         background=GRASS,
         collision=COLLISION,
+        collision_mask=COLLISION_MASK,
         blue_car=Car(BLUE_CAR, 640, 200, 180),
         red_car=Car(RED_CAR, 640, 600, 0),
         diamond_image=DIAMOND,
