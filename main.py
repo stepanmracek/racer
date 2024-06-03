@@ -1,5 +1,5 @@
 import math
-import time
+import random
 from dataclasses import dataclass, field
 
 import msgpack
@@ -23,6 +23,7 @@ class Car:
     max_velocity: float = 10.0
     rotation_velocity: int = 2
     acceleration: float = 0.1
+    score: int = 0
 
     images: dict[int, pg.Surface] = field(init=False)
     masks: dict[int, pg.Mask] = field(init=False)
@@ -61,6 +62,7 @@ class Car:
         self.y = self.init_vals["y"]
         self.velocity = self.init_vals["velocity"]
         self.angle = self.init_vals["angle"]
+        self.score = 0
 
     def draw(self, win: pg.Surface):
         img = self.images[self.angle]
@@ -112,6 +114,7 @@ class Car:
         diamond_coords: set[tuple[int, int]],
         diamond_mask: pg.Mask,
         diamond_sfx: pg.mixer.Sound,
+        spawn_mask: pg.Mask,
     ):
         self.control(pressed_keys, up_key, down_key, left_key, right_key)
         new_pos = self.get_next_pos()
@@ -125,7 +128,9 @@ class Car:
         for diamond in diamond_coords:
             if self.collision(new_pos, diamond_mask, diamond[0] - dhw, diamond[1] - dhh):
                 diamond_coords.remove(diamond)
+                diamond_coords.add(random_pos(spawn_mask))
                 diamond_sfx.play()
+                self.score += 1
                 break
 
         self.x = new_pos[0]
@@ -253,8 +258,16 @@ class Car:
         return readings
 
 
-def init_diamonds():
-    return {(250, 250), (500, 500), (450, 300), (750, 400), (950, 150), (1000, 600), (150, 450)}
+def random_pos(spawn_mask: pg.Mask) -> tuple[int, int]:
+    w, h = spawn_mask.get_size()
+    while True:
+        pos = random.randint(0, w - 1), random.randint(0, h - 1)
+        if spawn_mask.get_at(pos):
+            return pos
+
+
+def init_diamonds(spawn_mask: pg.Mask):
+    return {random_pos(spawn_mask) for _ in range(3)}
 
 
 @dataclass
@@ -265,11 +278,12 @@ class World:
     red_car: Car
     diamond_image: pg.Surface
     diamond_coords: set[tuple[int, int]]
+    spawn_mask: pg.Mask
 
     def reset(self):
         self.red_car.reset()
         self.blue_car.reset()
-        self.diamond_coords = init_diamonds()
+        self.diamond_coords = init_diamonds(self.spawn_mask)
 
     def draw_readings(self, win: pg.Surface, car: Car, readings: list):
         win.blit(
@@ -325,6 +339,8 @@ def main():
     DIAMOND = pg.image.load("assets/diamond.png")
     DIAMOND_MASK = pg.mask.from_surface(DIAMOND)
     DIAMOND_SFX = pg.mixer.Sound("assets/sound/money.mp3")
+    SPAWN_MASK = pg.mask.from_surface(pg.image.load("assets/spawn-mask.png"))
+    FONT = pg.font.Font(None, 42)
 
     world = World(
         background=GRASS,
@@ -332,7 +348,8 @@ def main():
         blue_car=Car(BLUE_CAR, 640, 200, 180),
         red_car=Car(RED_CAR, 640, 600, 0),
         diamond_image=DIAMOND,
-        diamond_coords=init_diamonds(),
+        diamond_coords=init_diamonds(SPAWN_MASK),
+        spawn_mask=SPAWN_MASK,
     )
     win = pg.display.set_mode((1280, 768))
     pg.display.set_caption("Racer")
@@ -361,6 +378,7 @@ def main():
             diamond_coords=world.diamond_coords,
             diamond_mask=DIAMOND_MASK,
             diamond_sfx=DIAMOND_SFX,
+            spawn_mask=SPAWN_MASK,
         )
         world.blue_car.step(
             pressed_keys=pressed_keys,
@@ -373,6 +391,7 @@ def main():
             diamond_coords=world.diamond_coords,
             diamond_mask=DIAMOND_MASK,
             diamond_sfx=DIAMOND_SFX,
+            spawn_mask=SPAWN_MASK,
         )
 
         red_car_readings = world.red_car.sensor_readings(
@@ -395,6 +414,16 @@ def main():
         world.draw(win)
         world.draw_readings(win, world.red_car, red_car_readings)
         # world.draw_readings(win, world.blue_car, blue_car_readings)
+
+        win.blit(
+            FONT.render(f"{world.red_car.score}", True, (192, 32, 32), (0, 0, 0)),
+            (win.get_width() / 2 - 50, win.get_height() - 36),
+        )
+        win.blit(
+            FONT.render(f"{world.blue_car.score}", True, (32, 32, 192), (0, 0, 0)),
+            (win.get_width() / 2 + 50, win.get_height() - 36),
+        )
+
         pg.display.update()
 
 
