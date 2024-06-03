@@ -1,6 +1,7 @@
 import math
 import random
 from dataclasses import dataclass, field
+from typing import Optional
 
 import msgpack
 import pygame as pg
@@ -198,6 +199,20 @@ class Car:
         if not moved:
             self.idle()
 
+    def is_object_in_range(
+        self, object_x, object_y, sensors_mask: pg.Mask, angle_step
+    ) -> Optional[tuple[int, int]]:
+        x = int(object_x - self.x) + 500
+        y = int(object_y - self.y) + 500
+        if x >= 0 and y >= 0 and x < 1000 and y < 1000 and sensors_mask.get_at((x, y)):
+            x -= 500
+            y -= 500
+            distance = int(math.hypot(x, y))
+            angle = (
+                (-(self.angle - (90 - math.degrees(math.atan2(-y, -x))))) + angle_step / 2
+            ) % 360
+            return int(angle), distance
+
     def sensor_readings(
         self,
         collision_mask: pg.Mask,
@@ -227,33 +242,19 @@ class Car:
                     break
 
         # other car in range?
-        x = int(other_car.x - self.x) + 500
-        y = int(other_car.y - self.y) + 500
-        if x >= 0 and y >= 0 and x < 1000 and y < 1000 and m.get_at((x, y)):
-            x -= 500
-            y -= 500
-            distance = int(math.hypot(x, y))
-            angle = (
-                (-(self.angle - (90 - math.degrees(math.atan2(-y, -x))))) + ANGLE_STEP / 2
-            ) % 360
-            slot = int(angle // ANGLE_STEP)
-            if not readings[slot] or distance < readings[slot][1]:
-                readings[slot] = ("e", distance)
+        angle_distance = self.is_object_in_range(other_car.x, other_car.y, m, ANGLE_STEP)
+        if angle_distance:
+            slot = angle_distance[0] // ANGLE_STEP
+            if not readings[slot] or angle_distance[1] < readings[slot][1]:
+                readings[slot] = ("e", angle_distance[1])
 
         # diamonds in range?
         for diamond_pos in diamond_coords:
-            x = int(diamond_pos[0] - self.x) + 500
-            y = int(diamond_pos[1] - self.y) + 500
-            if x >= 0 and y >= 0 and x < 1000 and y < 1000 and m.get_at((x, y)):
-                x -= 500
-                y -= 500
-                distance = int(math.hypot(x, y))
-                angle = (
-                    (-(self.angle - (90 - math.degrees(math.atan2(-y, -x))))) + ANGLE_STEP / 2
-                ) % 360
-                slot = int(angle // ANGLE_STEP)
-                if not readings[slot] or distance < readings[slot][1]:
-                    readings[slot] = ("d", distance)
+            angle_distance = self.is_object_in_range(diamond_pos[0], diamond_pos[1], m, ANGLE_STEP)
+            if angle_distance:
+                slot = angle_distance[0] // ANGLE_STEP
+                if not readings[slot] or angle_distance[1] < readings[slot][1]:
+                    readings[slot] = ("d", angle_distance[1])
 
         return readings
 
