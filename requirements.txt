@@ -1,1 +1,4 @@
+msgpack==1.0.8
 pygame==2.5.2
+pyzmq==26.0.3
+tqdm==4.66.4
