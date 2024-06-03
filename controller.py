@@ -26,7 +26,7 @@ def main():
     clock = pg.time.Clock()
 
     while True:
-        clock.tick(1000)
+        clock.tick(30)
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 return
