@@ -1,8 +1,11 @@
 import math
+import time
 from dataclasses import dataclass, field
-from tqdm import tqdm
 
+import msgpack
 import pygame as pg
+import zmq
+from tqdm import tqdm
 
 
 def scale_image(img, factor):
@@ -31,17 +34,13 @@ class Car:
             angle: pg.transform.rotate(self.img, angle)
             for angle in range(0, 360, self.rotation_velocity)
         }
-        self.masks = {
-            angle: pg.mask.from_surface(img) for angle, img in self.images.items()
-        }
+        self.masks = {angle: pg.mask.from_surface(img) for angle, img in self.images.items()}
 
         self.sensors_mask = {}
         sensors_img = pg.Surface((1000, 1000), pg.SRCALPHA)
         sensors_img.fill((0, 0, 0, 0))
         pg.draw.ellipse(sensors_img, (0, 0, 0, 255), (250, 0, 500, 750))
-        for angle in tqdm(
-            range(0, 360, self.rotation_velocity), desc="Pre-computing sensors mask"
-        ):
+        for angle in tqdm(range(0, 360, self.rotation_velocity), desc="Pre-computing sensors mask"):
             rotated_sensors_img = pg.transform.rotate(sensors_img, angle)
             rotated_sensors_img = rotated_sensors_img.subsurface(
                 (
@@ -55,12 +54,7 @@ class Car:
 
         self.crash_sound = pg.mixer.Sound("assets/sound/crash.mp3")
         self.crash_sound.set_volume(0.5)
-        self.init_vals = {
-            "x": self.x,
-            "y": self.y,
-            "velocity": self.velocity,
-            "angle": self.angle,
-        }
+        self.init_vals = {"x": self.x, "y": self.y, "velocity": self.velocity, "angle": self.angle}
 
     def reset(self):
         self.x = self.init_vals["x"]
@@ -122,14 +116,14 @@ class Car:
         self.control(pressed_keys, up_key, down_key, left_key, right_key)
         new_pos = self.get_next_pos()
 
-        if self.collision(new_pos, collision_mask) or self.collision_other_car(
-            new_pos, other_car
-        ):
+        if self.collision(new_pos, collision_mask) or self.collision_other_car(new_pos, other_car):
             self.bounce()
             return
 
+        dsize = diamond_mask.get_size()
+        dhw, dhh = dsize[0] / 2, dsize[1] / 2
         for diamond in diamond_coords:
-            if self.collision(new_pos, diamond_mask, *diamond):
+            if self.collision(new_pos, diamond_mask, diamond[0] - dhw, diamond[1] - dhh):
                 diamond_coords.remove(diamond)
                 diamond_sfx.play()
                 break
@@ -199,24 +193,74 @@ class Car:
         if not moved:
             self.idle()
 
+    def sensor_readings(
+        self,
+        collision_mask: pg.Mask,
+        other_car: "Car",
+        diamond_coords: set[tuple[int, int]],
+    ):
+        ANGLE_STEP = 15
+        m: pg.Mask = self.sensors_mask[self.angle]
+
+        # wall collisions
+        readings = [None for _ in range(0, 360, ANGLE_STEP)]
+        collisions = m.overlap_mask(collision_mask, (-self.x + 500, -self.y + 500))
+        for i, a in enumerate(range(0, 360, ANGLE_STEP)):
+            radians = math.radians(self.angle + a)
+            dy = -math.cos(radians)
+            dx = -math.sin(radians)
+            dh = math.hypot(dx, dy)
+            distance = 0.0
+            x = 500.0
+            y = 500.0
+            while distance < 1000:
+                x = x + dx
+                y = y + dy
+                distance += dh
+                if x >= 0 and y >= 0 and x < 1000 and y < 1000 and collisions.get_at((x, y)):
+                    readings[i] = ("w", distance)
+                    break
+
+        # other car in range?
+        x = int(other_car.x - self.x) + 500
+        y = int(other_car.y - self.y) + 500
+        if x >= 0 and y >= 0 and x < 1000 and y < 1000 and m.get_at((x, y)):
+            x -= 500
+            y -= 500
+            distance = int(math.hypot(x, y))
+            angle = (
+                (-(self.angle - (90 - math.degrees(math.atan2(-y, -x))))) + ANGLE_STEP / 2
+            ) % 360
+            slot = int(angle // ANGLE_STEP)
+            if not readings[slot] or distance < readings[slot][1]:
+                readings[slot] = ("e", distance)
+
+        # diamonds in range?
+        for diamond_pos in diamond_coords:
+            x = int(diamond_pos[0] - self.x) + 500
+            y = int(diamond_pos[1] - self.y) + 500
+            if x >= 0 and y >= 0 and x < 1000 and y < 1000 and m.get_at((x, y)):
+                x -= 500
+                y -= 500
+                distance = int(math.hypot(x, y))
+                angle = (
+                    (-(self.angle - (90 - math.degrees(math.atan2(-y, -x))))) + ANGLE_STEP / 2
+                ) % 360
+                slot = int(angle // ANGLE_STEP)
+                if not readings[slot] or distance < readings[slot][1]:
+                    readings[slot] = ("d", distance)
+
+        return readings
+
 
 def init_diamonds():
-    return {
-        (250, 250),
-        (500, 500),
-        (450, 300),
-        (750, 400),
-        (950, 150),
-        (1000, 600),
-        (150, 450),
-    }
+    return {(250, 250), (500, 500), (450, 300), (750, 400), (950, 150), (1000, 600), (150, 450)}
 
 
 @dataclass
 class World:
     background: pg.Surface
     collision: pg.Surface
-    collision_mask: pg.Mask
     blue_car: Car
     red_car: Car
     diamond_image: pg.Surface
@@ -227,116 +271,51 @@ class World:
         self.blue_car.reset()
         self.diamond_coords = init_diamonds()
 
-    def draw(self, win: pg.Surface):
-        win.blit(self.background, (0, 0))
-        win.blit(self.collision, (0, 0))
-
-        # dhw = self.diamond_image.get_width()/2
-        # dhh = self.diamond_image.get_height()/2
-        for diamond_pos in self.diamond_coords:
-            # win.blit(self.diamond_image, (diamond_pos[0] - dhw, diamond_pos[1] - dhh))
-            win.blit(self.diamond_image, diamond_pos)
-        self.red_car.draw(win)
-        self.blue_car.draw(win)
-
-        m: pg.Mask = self.red_car.sensors_mask[self.red_car.angle]
+    def draw_readings(self, win: pg.Surface, car: Car, readings: list):
         win.blit(
-            m.to_surface(setcolor=(0, 0, 0, 64), unsetcolor=(0, 0, 0, 0)),
-            (self.red_car.x - 500, self.red_car.y - 500),
+            car.sensors_mask[car.angle].to_surface(setcolor=(0, 0, 0, 32), unsetcolor=(0, 0, 0, 0)),
+            (car.x - 500, car.y - 500),
         )
-
-        # wall collisions
-        readings = [None for _ in range(0, 360, 15)]
-        collisions = m.overlap_mask(
-            self.collision_mask, (-self.red_car.x + 500, -self.red_car.y + 500)
-        )
-        for i, a in enumerate(range(0, 360, 15)):
-            radians = math.radians(self.red_car.angle + a)
-            dy = -math.cos(radians)
-            dx = -math.sin(radians)
-            dh = math.hypot(dx, dy)
-            distance = 0.0
-            x = 500.0
-            y = 500.0
-            pg.draw.line(
-                win,
-                (128, 128, 128),
-                (self.red_car.x, self.red_car.y),
-                (self.red_car.x + dx * 500, self.red_car.y + dy * 500),
-            )
-            while distance < 1000:
-                x = x + dx
-                y = y + dy
-                distance += dh
-                if (
-                    x >= 0
-                    and y >= 0
-                    and x < 1000
-                    and y < 1000
-                    and collisions.get_at((x, y))
-                ):
-                    readings[i] = ("w", distance)
-                    break
-
-        # other car in range?
-        x = int(self.blue_car.x - self.red_car.x) + 500
-        y = int(self.blue_car.y - self.red_car.y) + 500
-        if x >= 0 and y >= 0 and x < 1000 and y < 1000 and m.get_at((x, y)):
-            x -= 500
-            y -= 500
-            distance = int(math.hypot(x, y))
-            # pg.draw.line(win, (0,0,0), (self.red_car.x - 250, self.red_car.y), (self.red_car.x + 250, self.red_car.y))
-            # pg.draw.line(win, (0,0,0), (self.red_car.x, self.red_car.y - 250), (self.red_car.x, self.red_car.y + 250))
-            angle = (
-                (-(self.red_car.angle - (90 - math.degrees(math.atan2(-y, -x))))) + 7.5
-            ) % 360
-            slot = int(angle // 15)
-            print(angle, slot)
-            if not readings[slot] or distance < readings[slot][1]:
-                readings[slot] = ("e", distance)
-
-        # diamonds in range?
-        for diamond_pos in self.diamond_coords:
-            x = int(diamond_pos[0] - self.red_car.x) + 500
-            y = int(diamond_pos[1] - self.red_car.y) + 500
-            if x >= 0 and y >= 0 and x < 1000 and y < 1000 and m.get_at((x, y)):
-                x -= 500
-                y -= 500
-                distance = int(math.hypot(x, y))
-                # pg.draw.line(win, (0,0,0), (self.red_car.x - 250, self.red_car.y), (self.red_car.x + 250, self.red_car.y))
-                # pg.draw.line(win, (0,0,0), (self.red_car.x, self.red_car.y - 250), (self.red_car.x, self.red_car.y + 250))
-                angle = (
-                    (-(self.red_car.angle - (90 - math.degrees(math.atan2(-y, -x)))))
-                    + 7.5
-                ) % 360
-                slot = int(angle // 15)
-                if not readings[slot] or distance < readings[slot][1]:
-                    readings[slot] = ("d", distance)
-
-        # draw readings
-        what_color = {
-            "w": (255, 255, 0),
-            "e": (255, 0, 0),
-            "d": (0, 0, 255),
-        }
+        what_color = {"w": (255, 255, 0), "e": (255, 0, 0), "d": (0, 0, 255)}
         for i, r in enumerate(readings):
             if not r:
                 continue
             what, distance = r
-            radians = math.radians(self.red_car.angle + i * 15)
+            radians = math.radians(car.angle + i * 15)
             dy = -math.cos(radians)
             dx = -math.sin(radians)
+
+            pg.draw.line(
+                win,
+                (192, 192, 192),
+                (car.x, car.y),
+                (car.x + dx * distance, car.y + dy * distance),
+            )
             pg.draw.circle(
                 win,
                 what_color[what],
-                (self.red_car.x + dx * distance, self.red_car.y + dy * distance),
+                (car.x + dx * distance, car.y + dy * distance),
                 3 if what == "w" else 5,
             )
 
-        pg.display.update()
+    def draw(self, win: pg.Surface):
+        win.blit(self.background, (0, 0))
+        win.blit(self.collision, (0, 0))
+
+        dhw = self.diamond_image.get_width() / 2
+        dhh = self.diamond_image.get_height() / 2
+        for diamond_pos in self.diamond_coords:
+            win.blit(self.diamond_image, (diamond_pos[0] - dhw, diamond_pos[1] - dhh))
+
+        self.red_car.draw(win)
+        self.blue_car.draw(win)
 
 
 def main():
+    context = zmq.Context.instance()
+    publisher: zmq.Socket = context.socket(zmq.PUB)
+    publisher.bind("tcp://*:6000")
+
     pg.init()
     RED_CAR = scale_image(pg.image.load("assets/cars/red.png"), 0.75)
     BLUE_CAR = scale_image(pg.image.load("assets/cars/blue.png"), 0.75)
@@ -350,7 +329,6 @@ def main():
     world = World(
         background=GRASS,
         collision=COLLISION,
-        collision_mask=COLLISION_MASK,
         blue_car=Car(BLUE_CAR, 640, 200, 180),
         red_car=Car(RED_CAR, 640, 600, 0),
         diamond_image=DIAMOND,
@@ -397,7 +375,27 @@ def main():
             diamond_sfx=DIAMOND_SFX,
         )
 
+        red_car_readings = world.red_car.sensor_readings(
+            COLLISION_MASK, world.blue_car, world.diamond_coords
+        )
+        blue_car_readings = world.blue_car.sensor_readings(
+            COLLISION_MASK, world.red_car, world.diamond_coords
+        )
+
+        publisher.send(
+            b"red_car"
+            + msgpack.packb({"sensors": red_car_readings, "velocity": world.red_car.velocity})
+        )
+
+        publisher.send(
+            b"blue_car"
+            + msgpack.packb({"sensors": blue_car_readings, "velocity": world.blue_car.velocity})
+        )
+
         world.draw(win)
+        world.draw_readings(win, world.red_car, red_car_readings)
+        # world.draw_readings(win, world.blue_car, blue_car_readings)
+        pg.display.update()
 
 
 if __name__ == "__main__":
