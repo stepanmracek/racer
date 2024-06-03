@@ -17,19 +17,35 @@ def main():
     subscriber.connect("tcp://localhost:6000")
     subscriber.setsockopt(zmq.SUBSCRIBE, topic)
 
+    publisher: zmq.Socket = context.socket(zmq.PUB)
+    publisher.bind("tcp://localhost:6001")
+
     pg.init()
     win = pg.display.set_mode((500 + 50, 750))
-    pg.display.set_caption("Racer")
+    pg.display.set_caption(f"Controller for '{topic.decode()}'")
     clock = pg.time.Clock()
 
     while True:
-        clock.tick(30)
+        clock.tick(1000)
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 return
 
         readings = msgpack.loads(subscriber.recv()[len(topic) :])
         pressed_keys = pg.key.get_pressed()
+
+        up, down, left, right = False, False, False, False
+        if pressed_keys[pg.K_LEFT]:
+            left = True
+        if pressed_keys[pg.K_RIGHT]:
+            right = True
+        if pressed_keys[pg.K_UP]:
+            up = True
+        if pressed_keys[pg.K_DOWN]:
+            down = True
+        
+        keys = {"u": up, "d": down, "l": left, "r": right}
+        publisher.send(topic + msgpack.packb(keys))
 
         win.fill((0, 0, 0))
         what_color = {"w": (255, 255, 0), "e": (255, 0, 0), "d": (0, 0, 255)}

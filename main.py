@@ -1,7 +1,8 @@
 import math
 import random
 from dataclasses import dataclass, field
-from typing import Optional
+from threading import Thread
+from typing import Literal, Optional
 
 import msgpack
 import pygame as pg
@@ -107,10 +108,10 @@ class Car:
         self,
         pressed_keys: pg.key.ScancodeWrapper,
         collision_mask: pg.Mask,
-        up_key: int,
-        down_key: int,
-        left_key: int,
-        right_key: int,
+        up_key: bool,
+        down_key: bool,
+        left_key: bool,
+        right_key: bool,
         other_car: "Car",
         diamond_coords: set[tuple[int, int]],
         diamond_mask: pg.Mask,
@@ -180,20 +181,20 @@ class Car:
     def control(
         self,
         pressed_keys: pg.key.ScancodeWrapper,
-        up_key: int,
-        down_key: int,
-        left_key: int,
-        right_key: int,
+        up_key: bool,
+        down_key: bool,
+        left_key: bool,
+        right_key: bool,
     ):
         moved = False
-        if pressed_keys[left_key]:
+        if left_key:
             self.left()
-        if pressed_keys[right_key]:
+        if right_key:
             self.right()
-        if pressed_keys[up_key]:
+        if up_key:
             moved = True
             self.forward()
-        if pressed_keys[down_key]:
+        if down_key:
             moved = True
             self.backward()
         if not moved:
@@ -325,11 +326,26 @@ class World:
         self.red_car.draw(win)
         self.blue_car.draw(win)
 
+red_car_keys = {"u": False, "d": False, "l": False, "r": False}
+
+def key_subscriber(car_color: Literal[b"red_car", b"blue_car"]):
+    context = zmq.Context.instance()
+    subscriber: zmq.Socket = context.socket(zmq.SUB)
+    subscriber.setsockopt(zmq.CONFLATE, 1)
+    subscriber.connect("tcp://localhost:6001")
+    topic = car_color
+    subscriber.setsockopt(zmq.SUBSCRIBE, topic)
+    global red_car_keys
+    while True:
+        red_car_keys = msgpack.loads(subscriber.recv()[len(topic) :])
 
 def main():
     context = zmq.Context.instance()
     publisher: zmq.Socket = context.socket(zmq.PUB)
-    publisher.bind("tcp://*:6000")
+    publisher.bind("tcp://localhost:6000")
+
+    red_car_keys_subscriber_thread = Thread(target=key_subscriber, args=(b"red_car",), daemon=True)
+    red_car_keys_subscriber_thread.start()
 
     pg.init()
     RED_CAR = scale_image(pg.image.load("assets/cars/red.png"), 0.75)
@@ -371,10 +387,10 @@ def main():
         world.red_car.step(
             pressed_keys=pressed_keys,
             collision_mask=COLLISION_MASK,
-            up_key=pg.K_UP,
-            down_key=pg.K_DOWN,
-            left_key=pg.K_LEFT,
-            right_key=pg.K_RIGHT,
+            up_key=red_car_keys["u"], # pressed_keys[pg.K_UP],
+            down_key=red_car_keys["d"], # pressed_keys[pg.K_DOWN],
+            left_key=red_car_keys["l"], # pressed_keys[pg.K_LEFT],
+            right_key=red_car_keys["r"], # pressed_keys[pg.K_RIGHT],
             other_car=world.blue_car,
             diamond_coords=world.diamond_coords,
             diamond_mask=DIAMOND_MASK,
@@ -384,10 +400,10 @@ def main():
         world.blue_car.step(
             pressed_keys=pressed_keys,
             collision_mask=COLLISION_MASK,
-            up_key=pg.K_w,
-            down_key=pg.K_s,
-            left_key=pg.K_a,
-            right_key=pg.K_d,
+            up_key=pressed_keys[pg.K_w],
+            down_key=pressed_keys[pg.K_s],
+            left_key=pressed_keys[pg.K_a],
+            right_key=pressed_keys[pg.K_d],
             other_car=world.red_car,
             diamond_coords=world.diamond_coords,
             diamond_mask=DIAMOND_MASK,
