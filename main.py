@@ -349,13 +349,16 @@ def main():
     red_car_keys_subscriber_thread.start()
 
     pg.init()
-    RED_CAR = scale_image(pg.image.load("assets/cars/red.png"), 0.75)
-    BLUE_CAR = scale_image(pg.image.load("assets/cars/blue.png"), 0.75)
-    BAKGROUND = pg.image.load("assets/maps/park/bg.png")
-    COLLISION = pg.image.load("assets/maps/park/map.png")
-    SPAWN_MASK = pg.mask.from_surface(pg.image.load("assets/maps/park/spawn-mask.png"))
+    win = pg.display.set_mode((1280, 768))
+    RED_CAR = scale_image(pg.image.load("assets/cars/red.png").convert_alpha(), 0.75)
+    BLUE_CAR = scale_image(pg.image.load("assets/cars/blue.png").convert_alpha(), 0.75)
+    BAKGROUND = pg.image.load("assets/maps/park/bg.png").convert()
+    COLLISION = pg.image.load("assets/maps/park/map.png").convert_alpha()
+    SPAWN_MASK = pg.mask.from_surface(
+        pg.image.load("assets/maps/park/spawn-mask.png").convert_alpha()
+    )
     COLLISION_MASK = pg.mask.from_surface(COLLISION)
-    DIAMOND = pg.image.load("assets/diamond.png")
+    DIAMOND = pg.image.load("assets/diamond.png").convert_alpha()
     DIAMOND_MASK = pg.mask.from_surface(DIAMOND)
     DIAMOND_SFX = pg.mixer.Sound("assets/sound/money.mp3")
     FONT = pg.font.Font(None, 42)
@@ -369,7 +372,6 @@ def main():
         diamond_coords=init_diamonds(SPAWN_MASK),
         spawn_mask=SPAWN_MASK,
     )
-    win = pg.display.set_mode((1280, 768))
     pg.display.set_caption("Racer")
     clock = pg.time.Clock()
 
