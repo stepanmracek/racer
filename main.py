@@ -228,16 +228,18 @@ class Car:
             radians = math.radians(self.angle + a)
             dy = -math.cos(radians)
             dx = -math.sin(radians)
-            dh = math.hypot(dx, dy)
-            distance = 0.0
+            distance = 0
             x = 500.0
             y = 500.0
-            while distance < 1000:
+            # TODO consider here binary search
+            while distance < 500:
                 x = x + dx
                 y = y + dy
-                distance += dh
-                if x >= 0 and y >= 0 and x < 1000 and y < 1000 and collisions.get_at((x, y)):
-                    readings[i] = ("w", int(distance))
+                distance += 1
+                if x < 0.0 or y < 0.0 or x >= 1000.0 or y >= 1000.0:
+                    break
+                if collisions.get_at((x, y)):
+                    readings[i] = ("w", distance)
                     break
 
         # other car in range?
