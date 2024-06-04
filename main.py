@@ -106,7 +106,6 @@ class Car:
 
     def step(
         self,
-        pressed_keys: pg.key.ScancodeWrapper,
         collision_mask: pg.Mask,
         up_key: bool,
         down_key: bool,
@@ -118,7 +117,7 @@ class Car:
         diamond_sfx: pg.mixer.Sound,
         spawn_mask: pg.Mask,
     ):
-        self.control(pressed_keys, up_key, down_key, left_key, right_key)
+        self.control(up_key, down_key, left_key, right_key)
         new_pos = self.get_next_pos()
 
         if self.collision(new_pos, collision_mask) or self.collision_other_car(new_pos, other_car):
@@ -180,7 +179,6 @@ class Car:
 
     def control(
         self,
-        pressed_keys: pg.key.ScancodeWrapper,
         up_key: bool,
         down_key: bool,
         left_key: bool,
@@ -326,7 +324,9 @@ class World:
         self.red_car.draw(win)
         self.blue_car.draw(win)
 
+
 red_car_keys = {"u": False, "d": False, "l": False, "r": False}
+
 
 def key_subscriber(car_color: Literal[b"red_car", b"blue_car"]):
     context = zmq.Context.instance()
@@ -338,6 +338,7 @@ def key_subscriber(car_color: Literal[b"red_car", b"blue_car"]):
     global red_car_keys
     while True:
         red_car_keys = msgpack.loads(subscriber.recv()[len(topic) :])
+
 
 def main():
     context = zmq.Context.instance()
@@ -385,12 +386,11 @@ def main():
             world.reset()
 
         world.red_car.step(
-            pressed_keys=pressed_keys,
             collision_mask=COLLISION_MASK,
-            up_key=red_car_keys["u"], # pressed_keys[pg.K_UP],
-            down_key=red_car_keys["d"], # pressed_keys[pg.K_DOWN],
-            left_key=red_car_keys["l"], # pressed_keys[pg.K_LEFT],
-            right_key=red_car_keys["r"], # pressed_keys[pg.K_RIGHT],
+            up_key=red_car_keys["u"],  # pressed_keys[pg.K_UP],
+            down_key=red_car_keys["d"],  # pressed_keys[pg.K_DOWN],
+            left_key=red_car_keys["l"],  # pressed_keys[pg.K_LEFT],
+            right_key=red_car_keys["r"],  # pressed_keys[pg.K_RIGHT],
             other_car=world.blue_car,
             diamond_coords=world.diamond_coords,
             diamond_mask=DIAMOND_MASK,
@@ -398,7 +398,6 @@ def main():
             spawn_mask=SPAWN_MASK,
         )
         world.blue_car.step(
-            pressed_keys=pressed_keys,
             collision_mask=COLLISION_MASK,
             up_key=pressed_keys[pg.K_w],
             down_key=pressed_keys[pg.K_s],
