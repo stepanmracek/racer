@@ -1,6 +1,8 @@
 import argparse
-
+import csv
+import json
 import math
+
 import msgpack
 import pygame as pg
 import zmq
@@ -9,7 +11,9 @@ import zmq
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--topic", default="red_car")
-    topic: bytes = parser.parse_args().topic.encode()
+    parser.add_argument("--output")
+    args = parser.parse_args()
+    topic: bytes = args.topic.encode()
 
     context = zmq.Context.instance()
     subscriber: zmq.Socket = context.socket(zmq.SUB)
@@ -25,13 +29,22 @@ def main():
     pg.display.set_caption(f"Controller for '{topic.decode()}'")
     clock = pg.time.Clock()
 
+    if args.output:
+        output_file = open(args.output, "at")
+        csv_writer = csv.writer(output_file)
+    else:
+        output_file = None
+        csv_writer = None
+
+    last_velocity_zero = True
     while True:
         clock.tick(30)
-        for event in pg.event.get():
-            if event.type == pg.QUIT:
-                return
+        quit_event = next((event for event in pg.event.get() if event.type == pg.QUIT), None)
+        if quit_event:
+            break
 
         readings = msgpack.loads(subscriber.recv()[len(topic) :])
+        velocity = readings["velocity"]
         pressed_keys = pg.key.get_pressed()
 
         up, down, left, right = False, False, False, False
@@ -43,9 +56,17 @@ def main():
             up = True
         if pressed_keys[pg.K_DOWN]:
             down = True
-        
+
         keys = {"u": up, "d": down, "l": left, "r": right}
         publisher.send(topic + msgpack.packb(keys))
+
+        if csv_writer:
+            if abs(velocity) < 1e-3 and last_velocity_zero:
+                # do not dump data if car is not moving and was also not moving in last frame
+                pass
+            else:
+                sensors = [f"{s[0]}-{s[1]}" if s else None for s in readings["sensors"]]
+                csv_writer.writerow((velocity, *sensors, int(up), int(down), int(left), int(right)))
 
         win.fill((0, 0, 0))
         what_color = {"w": (255, 255, 0), "e": (255, 0, 0), "d": (0, 0, 255)}
@@ -68,12 +89,16 @@ def main():
             )
 
         pg.draw.rect(win, (64, 64, 64), (500, 0, 50, 750))
-        velocity = readings["velocity"] * 40
         if velocity >= 0:
-            pg.draw.rect(win, (64, 64, 192), (500, 500-velocity, 50, velocity))
+            pg.draw.rect(win, (64, 64, 192), (500, 500 - velocity * 40, 50, velocity * 40))
         else:
-            pg.draw.rect(win, (192, 64, 64), (500, 500, 50, abs(velocity)))
+            pg.draw.rect(win, (192, 64, 64), (500, 500, 50, abs(velocity) * 40))
         pg.display.update()
+
+        last_velocity_zero = abs(velocity) < 1e-3
+
+    if output_file:
+        output_file.close()
 
 
 if __name__ == "__main__":

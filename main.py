@@ -217,7 +217,7 @@ class Car:
         collision_mask: pg.Mask,
         other_car: "Car",
         diamond_coords: set[tuple[int, int]],
-    ):
+    ) -> list[Optional[tuple[Literal["w", "d", "e"], int]]]:
         ANGLE_STEP = 15
         m: pg.Mask = self.sensors_mask[self.angle]
 
@@ -237,7 +237,7 @@ class Car:
                 y = y + dy
                 distance += dh
                 if x >= 0 and y >= 0 and x < 1000 and y < 1000 and collisions.get_at((x, y)):
-                    readings[i] = ("w", distance)
+                    readings[i] = ("w", int(distance))
                     break
 
         # other car in range?
