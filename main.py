@@ -231,7 +231,6 @@ class Car:
             distance = 0
             x = 500.0
             y = 500.0
-            # TODO consider here binary search
             while distance < 500:
                 x = x + dx
                 y = y + dy
