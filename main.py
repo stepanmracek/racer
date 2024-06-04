@@ -273,7 +273,6 @@ def init_diamonds(spawn_mask: pg.Mask):
 @dataclass
 class World:
     background: pg.Surface
-    collision: pg.Surface
     blue_car: Car
     red_car: Car
     diamond_image: pg.Surface
@@ -314,7 +313,6 @@ class World:
 
     def draw(self, win: pg.Surface):
         win.blit(self.background, (0, 0))
-        win.blit(self.collision, (0, 0))
 
         dhw = self.diamond_image.get_width() / 2
         dhh = self.diamond_image.get_height() / 2
@@ -354,6 +352,7 @@ def main():
     BLUE_CAR = scale_image(pg.image.load("assets/cars/blue.png").convert_alpha(), 0.75)
     BAKGROUND = pg.image.load("assets/maps/park/bg.png").convert()
     COLLISION = pg.image.load("assets/maps/park/map.png").convert_alpha()
+    BAKGROUND.blit(COLLISION, (0, 0))
     SPAWN_MASK = pg.mask.from_surface(
         pg.image.load("assets/maps/park/spawn-mask.png").convert_alpha()
     )
@@ -365,7 +364,6 @@ def main():
 
     world = World(
         background=BAKGROUND,
-        collision=COLLISION,
         blue_car=Car(BLUE_CAR, 640, 200, 180),
         red_car=Car(RED_CAR, 640, 600, 0),
         diamond_image=DIAMOND,
@@ -430,7 +428,7 @@ def main():
         )
 
         world.draw(win)
-        world.draw_readings(win, world.red_car, red_car_readings)
+        # world.draw_readings(win, world.red_car, red_car_readings)
         # world.draw_readings(win, world.blue_car, blue_car_readings)
 
         win.blit(
