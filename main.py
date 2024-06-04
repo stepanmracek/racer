@@ -351,17 +351,17 @@ def main():
     pg.init()
     RED_CAR = scale_image(pg.image.load("assets/cars/red.png"), 0.75)
     BLUE_CAR = scale_image(pg.image.load("assets/cars/blue.png"), 0.75)
-    GRASS = pg.image.load("assets/grass-fullhd.png")
-    COLLISION = pg.image.load("assets/collision-test.png")
+    BAKGROUND = pg.image.load("assets/maps/park/bg.png")
+    COLLISION = pg.image.load("assets/maps/park/map.png")
+    SPAWN_MASK = pg.mask.from_surface(pg.image.load("assets/maps/park/spawn-mask.png"))
     COLLISION_MASK = pg.mask.from_surface(COLLISION)
     DIAMOND = pg.image.load("assets/diamond.png")
     DIAMOND_MASK = pg.mask.from_surface(DIAMOND)
     DIAMOND_SFX = pg.mixer.Sound("assets/sound/money.mp3")
-    SPAWN_MASK = pg.mask.from_surface(pg.image.load("assets/spawn-mask.png"))
     FONT = pg.font.Font(None, 42)
 
     world = World(
-        background=GRASS,
+        background=BAKGROUND,
         collision=COLLISION,
         blue_car=Car(BLUE_CAR, 640, 200, 180),
         red_car=Car(RED_CAR, 640, 600, 0),
