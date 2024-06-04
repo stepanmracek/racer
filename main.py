@@ -10,6 +10,9 @@ import zmq
 from tqdm import tqdm
 
 
+SENSORS_ANGLE_STEP = 15
+
+
 def scale_image(img, factor):
     size = round(img.get_width() * factor), round(img.get_height() * factor)
     return pg.transform.smoothscale(img, size)
@@ -31,6 +34,7 @@ class Car:
     masks: dict[int, pg.Mask] = field(init=False)
     crash_sound: pg.mixer.Sound = field(init=False)
     sensors_mask: dict[int, pg.Mask] = field(init=False)
+    sensors_rays: dict[int, list[list[tuple[int, int]]]] = field(init=False)
 
     def __post_init__(self):
         self.images = {
@@ -40,10 +44,14 @@ class Car:
         self.masks = {angle: pg.mask.from_surface(img) for angle, img in self.images.items()}
 
         self.sensors_mask = {}
+        self.sensors_rays = {}
         sensors_img = pg.Surface((1000, 1000), pg.SRCALPHA)
         sensors_img.fill((0, 0, 0, 0))
         pg.draw.ellipse(sensors_img, (0, 0, 0, 255), (250, 0, 500, 750))
-        for angle in tqdm(range(0, 360, self.rotation_velocity), desc="Pre-computing sensors mask"):
+        for angle in tqdm(
+            range(0, 360, self.rotation_velocity),
+            desc="Pre-computing sensors mask and rays"
+        ):
             rotated_sensors_img = pg.transform.rotate(sensors_img, angle)
             rotated_sensors_img = rotated_sensors_img.subsurface(
                 (
@@ -53,7 +61,26 @@ class Car:
                     1000,
                 )
             )
-            self.sensors_mask[angle] = pg.mask.from_surface(rotated_sensors_img)
+            mask = pg.mask.from_surface(rotated_sensors_img)
+            self.sensors_mask[angle] = mask
+            self.sensors_rays[angle] = [[] for _ in range(0, 360, SENSORS_ANGLE_STEP)]
+            for i, ray_orientation in enumerate(range(0, 360, SENSORS_ANGLE_STEP)):
+                radians = math.radians(angle + ray_orientation)
+                dy = -math.cos(radians)
+                dx = -math.sin(radians)
+                distance = 0
+                x = 500.0
+                y = 500.0
+                while distance < 500:
+                    if x < 0.0 or y < 0.0 or x >= 1000.0 or y >= 1000.0:
+                        break
+                    if not mask.get_at((x, y)):
+                        break
+                    
+                    self.sensors_rays[angle][i].append((int(x), int(y)))
+                    x = x + dx
+                    y = y + dy
+                    distance += 1
 
         self.crash_sound = pg.mixer.Sound("assets/sound/crash.mp3")
         self.crash_sound.set_volume(0.5)
@@ -218,41 +245,30 @@ class Car:
         other_car: "Car",
         diamond_coords: set[tuple[int, int]],
     ) -> list[Optional[tuple[Literal["w", "d", "e"], int]]]:
-        ANGLE_STEP = 15
         m: pg.Mask = self.sensors_mask[self.angle]
 
         # wall collisions
-        readings = [None for _ in range(0, 360, ANGLE_STEP)]
+        readings = [None for _ in range(0, 360, SENSORS_ANGLE_STEP)]
         collisions = m.overlap_mask(collision_mask, (-self.x + 500, -self.y + 500))
-        for i, a in enumerate(range(0, 360, ANGLE_STEP)):
-            radians = math.radians(self.angle + a)
-            dy = -math.cos(radians)
-            dx = -math.sin(radians)
-            distance = 0
-            x = 500.0
-            y = 500.0
-            while distance < 500:
-                x = x + dx
-                y = y + dy
-                distance += 1
-                if x < 0.0 or y < 0.0 or x >= 1000.0 or y >= 1000.0:
-                    break
+
+        for i, ray in enumerate(self.sensors_rays[self.angle]):
+            for distance, (x, y) in enumerate(ray):
                 if collisions.get_at((x, y)):
                     readings[i] = ("w", distance)
                     break
 
         # other car in range?
-        angle_distance = self.is_object_in_range(other_car.x, other_car.y, m, ANGLE_STEP)
+        angle_distance = self.is_object_in_range(other_car.x, other_car.y, m, SENSORS_ANGLE_STEP)
         if angle_distance:
-            slot = angle_distance[0] // ANGLE_STEP
+            slot = angle_distance[0] // SENSORS_ANGLE_STEP
             if not readings[slot] or angle_distance[1] < readings[slot][1]:
                 readings[slot] = ("e", angle_distance[1])
 
         # diamonds in range?
         for diamond_pos in diamond_coords:
-            angle_distance = self.is_object_in_range(diamond_pos[0], diamond_pos[1], m, ANGLE_STEP)
+            angle_distance = self.is_object_in_range(diamond_pos[0], diamond_pos[1], m, SENSORS_ANGLE_STEP)
             if angle_distance:
-                slot = angle_distance[0] // ANGLE_STEP
+                slot = angle_distance[0] // SENSORS_ANGLE_STEP
                 if not readings[slot] or angle_distance[1] < readings[slot][1]:
                     readings[slot] = ("d", angle_distance[1])
 
