@@ -1,5 +1,6 @@
 import math
 import random
+from argparse import ArgumentParser
 from dataclasses import dataclass, field
 from threading import Thread
 from typing import Literal, Optional
@@ -49,8 +50,7 @@ class Car:
         sensors_img.fill((0, 0, 0, 0))
         pg.draw.ellipse(sensors_img, (0, 0, 0, 255), (250, 0, 500, 750))
         for angle in tqdm(
-            range(0, 360, self.rotation_velocity),
-            desc="Pre-computing sensors mask and rays"
+            range(0, 360, self.rotation_velocity), desc="Pre-computing sensors mask and rays"
         ):
             rotated_sensors_img = pg.transform.rotate(sensors_img, angle)
             rotated_sensors_img = rotated_sensors_img.subsurface(
@@ -76,7 +76,7 @@ class Car:
                         break
                     if not mask.get_at((x, y)):
                         break
-                    
+
                     self.sensors_rays[angle][i].append((int(x), int(y)))
                     x = x + dx
                     y = y + dy
@@ -149,7 +149,9 @@ class Car:
         new_angle = self.control(up_key, down_key, left_key, right_key)
         new_pos = self.get_next_pos()
 
-        if self.collision(new_angle, new_pos, collision_mask) or self.collision_other_car(new_angle, new_pos, other_car):
+        if self.collision(new_angle, new_pos, collision_mask) or self.collision_other_car(
+            new_angle, new_pos, other_car
+        ):
             self.bounce()
             return
 
@@ -179,14 +181,18 @@ class Car:
         elif self.velocity < 0:
             self.velocity = min(self.velocity + self.acceleration * 0.25, 0.0)
 
-    def collision(self, candidate_angle: int, candidate_pos: tuple[float, float], mask: pg.Mask, x=0, y=0):
+    def collision(
+        self, candidate_angle: int, candidate_pos: tuple[float, float], mask: pg.Mask, x=0, y=0
+    ):
         img = self.images[candidate_angle]
         car_mask = self.masks[candidate_angle]
         r = img.get_rect()
         offset = (candidate_pos[0] - r.centerx - x, candidate_pos[1] - r.centery - y)
         return mask.overlap(car_mask, offset)
 
-    def collision_other_car(self, candidate_angle: int, candidate_pos: tuple[float, float], other_car: "Car"):
+    def collision_other_car(
+        self, candidate_angle: int, candidate_pos: tuple[float, float], other_car: "Car"
+    ):
         this_img = self.images[candidate_angle]
         this_mask = self.masks[candidate_angle]
         this_r = this_img.get_rect()
@@ -271,7 +277,9 @@ class Car:
 
         # diamonds in range?
         for diamond_pos in diamond_coords:
-            angle_distance = self.is_object_in_range(diamond_pos[0], diamond_pos[1], m, SENSORS_ANGLE_STEP)
+            angle_distance = self.is_object_in_range(
+                diamond_pos[0], diamond_pos[1], m, SENSORS_ANGLE_STEP
+            )
             if angle_distance:
                 slot = angle_distance[0] // SENSORS_ANGLE_STEP
                 if not readings[slot] or angle_distance[1] < readings[slot][1]:
@@ -361,6 +369,10 @@ def key_subscriber(car_color: Literal[b"red_car", b"blue_car"]):
 
 
 def main():
+    arg_parser = ArgumentParser()
+    arg_parser.add_argument("--level", default="park", choices=["park"])
+    args = arg_parser.parse_args()
+
     context = zmq.Context.instance()
     publisher: zmq.Socket = context.socket(zmq.PUB)
     publisher.bind("tcp://localhost:6000")
@@ -372,11 +384,11 @@ def main():
     win = pg.display.set_mode((1280, 768))
     RED_CAR = scale_image(pg.image.load("assets/cars/red.png").convert_alpha(), 0.75)
     BLUE_CAR = scale_image(pg.image.load("assets/cars/blue.png").convert_alpha(), 0.75)
-    BAKGROUND = pg.image.load("assets/maps/park/bg.png").convert()
-    COLLISION = pg.image.load("assets/maps/park/map.png").convert_alpha()
+    BAKGROUND = pg.image.load(f"assets/maps/{args.level}/bg.png").convert()
+    COLLISION = pg.image.load(f"assets/maps/{args.level}/map.png").convert_alpha()
     BAKGROUND.blit(COLLISION, (0, 0))
     SPAWN_MASK = pg.mask.from_surface(
-        pg.image.load("assets/maps/park/spawn-mask.png").convert_alpha()
+        pg.image.load(f"assets/maps/{args.level}/spawn-mask.png").convert_alpha()
     )
     COLLISION_MASK = pg.mask.from_surface(COLLISION)
     DIAMOND = pg.image.load("assets/diamond.png").convert_alpha()
