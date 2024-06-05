@@ -370,7 +370,7 @@ def key_subscriber(car_color: Literal[b"red_car", b"blue_car"]):
 
 def main():
     arg_parser = ArgumentParser()
-    arg_parser.add_argument("--level", default="park", choices=["park"])
+    arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
     args = arg_parser.parse_args()
 
     context = zmq.Context.instance()
