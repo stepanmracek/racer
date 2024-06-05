@@ -98,21 +98,23 @@ class Car:
         r = img.get_rect()
         win.blit(img, (self.x - r.centerx, self.y - r.centery))
 
-    def left(self):
+    def left(self, angle: int) -> int:
         if self.velocity > 0.05:
-            self.angle += self.rotation_velocity
+            angle += self.rotation_velocity
         elif self.velocity < -0.05:
-            self.angle -= self.rotation_velocity
+            angle -= self.rotation_velocity
 
-        self.angle = self.angle % 360
+        angle = angle % 360
+        return angle
 
-    def right(self):
+    def right(self, angle: int) -> int:
         if self.velocity > 0.01:
-            self.angle -= self.rotation_velocity
+            angle -= self.rotation_velocity
         elif self.velocity < -0.01:
-            self.angle += self.rotation_velocity
+            angle += self.rotation_velocity
 
-        self.angle = self.angle % 360
+        angle = angle % 360
+        return angle
 
     def forward(self):
         if self.velocity >= 0:
@@ -144,17 +146,17 @@ class Car:
         diamond_sfx: pg.mixer.Sound,
         spawn_mask: pg.Mask,
     ):
-        self.control(up_key, down_key, left_key, right_key)
+        new_angle = self.control(up_key, down_key, left_key, right_key)
         new_pos = self.get_next_pos()
 
-        if self.collision(new_pos, collision_mask) or self.collision_other_car(new_pos, other_car):
+        if self.collision(new_angle, new_pos, collision_mask) or self.collision_other_car(new_angle, new_pos, other_car):
             self.bounce()
             return
 
         dsize = diamond_mask.get_size()
         dhw, dhh = dsize[0] / 2, dsize[1] / 2
         for diamond in diamond_coords:
-            if self.collision(new_pos, diamond_mask, diamond[0] - dhw, diamond[1] - dhh):
+            if self.collision(new_angle, new_pos, diamond_mask, diamond[0] - dhw, diamond[1] - dhh):
                 diamond_coords.remove(diamond)
                 diamond_coords.add(random_pos(spawn_mask))
                 diamond_sfx.play()
@@ -163,6 +165,7 @@ class Car:
 
         self.x = new_pos[0]
         self.y = new_pos[1]
+        self.angle = new_angle
 
     def get_next_pos(self) -> tuple[float, float]:
         radians = math.radians(self.angle)
@@ -176,16 +179,16 @@ class Car:
         elif self.velocity < 0:
             self.velocity = min(self.velocity + self.acceleration * 0.25, 0.0)
 
-    def collision(self, candidate_pos: tuple[float, float], mask: pg.Mask, x=0, y=0):
-        img = self.images[self.angle]
-        car_mask = self.masks[self.angle]
+    def collision(self, candidate_angle: int, candidate_pos: tuple[float, float], mask: pg.Mask, x=0, y=0):
+        img = self.images[candidate_angle]
+        car_mask = self.masks[candidate_angle]
         r = img.get_rect()
         offset = (candidate_pos[0] - r.centerx - x, candidate_pos[1] - r.centery - y)
         return mask.overlap(car_mask, offset)
 
-    def collision_other_car(self, candidate_pos: tuple[float, float], other_car: "Car"):
-        this_img = self.images[self.angle]
-        this_mask = self.masks[self.angle]
+    def collision_other_car(self, candidate_angle: int, candidate_pos: tuple[float, float], other_car: "Car"):
+        this_img = self.images[candidate_angle]
+        this_mask = self.masks[candidate_angle]
         this_r = this_img.get_rect()
 
         other_img = other_car.images[other_car.angle]
@@ -210,12 +213,13 @@ class Car:
         down_key: bool,
         left_key: bool,
         right_key: bool,
-    ):
+    ) -> int:
         moved = False
+        new_angle = self.angle
         if left_key:
-            self.left()
+            new_angle = self.left(new_angle)
         if right_key:
-            self.right()
+            new_angle = self.right(new_angle)
         if up_key:
             moved = True
             self.forward()
@@ -224,6 +228,7 @@ class Car:
             self.backward()
         if not moved:
             self.idle()
+        return new_angle
 
     def is_object_in_range(
         self, object_x, object_y, sensors_mask: pg.Mask, angle_step
