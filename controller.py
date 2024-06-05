@@ -10,10 +10,10 @@ import zmq
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--topic", default="red_car")
+    parser.add_argument("--car", default="red", choices=["red", "blue"])
     parser.add_argument("--output")
     args = parser.parse_args()
-    topic: bytes = args.topic.encode()
+    topic: bytes = args.car.encode() + b"_car"
 
     context = zmq.Context.instance()
     subscriber: zmq.Socket = context.socket(zmq.SUB)
@@ -22,11 +22,11 @@ def main():
     subscriber.setsockopt(zmq.SUBSCRIBE, topic)
 
     publisher: zmq.Socket = context.socket(zmq.PUB)
-    publisher.bind("tcp://localhost:6001")
+    publisher.bind(f"tcp://localhost:{6001 if args.car == 'red' else 6002}")
 
     pg.init()
     win = pg.display.set_mode((500 + 50, 750))
-    pg.display.set_caption(f"Controller for '{topic.decode()}'")
+    pg.display.set_caption(f"Controller for {args.car} car")
     clock = pg.time.Clock()
 
     if args.output:
@@ -58,7 +58,7 @@ def main():
             down = True
 
         keys = {"u": up, "d": down, "l": left, "r": right}
-        publisher.send(topic + msgpack.packb(keys))
+        publisher.send(msgpack.packb(keys))
 
         if csv_writer:
             if abs(velocity) < 1e-3 and last_velocity_zero:

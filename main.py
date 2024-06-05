@@ -353,19 +353,24 @@ class World:
         self.blue_car.draw(win)
 
 
-red_car_keys = {"u": False, "d": False, "l": False, "r": False}
+car_keys = {
+    "red": {"u": False, "d": False, "l": False, "r": False},
+    "blue": {"u": False, "d": False, "l": False, "r": False},
+}
 
 
-def key_subscriber(car_color: Literal[b"red_car", b"blue_car"]):
+def key_subscriber(car_color: Literal["red", "blue"]):
     context = zmq.Context.instance()
     subscriber: zmq.Socket = context.socket(zmq.SUB)
     subscriber.setsockopt(zmq.CONFLATE, 1)
-    subscriber.connect("tcp://localhost:6001")
-    topic = car_color
-    subscriber.setsockopt(zmq.SUBSCRIBE, topic)
-    global red_car_keys
+    subscriber.connect(f"tcp://localhost:{6001 if car_color == 'red' else 6002}")
+    subscriber.setsockopt(zmq.SUBSCRIBE, b'')
+    global car_keys
     while True:
-        red_car_keys = msgpack.loads(subscriber.recv()[len(topic) :])
+        try:
+            car_keys[car_color] = msgpack.loads(subscriber.recv())
+        except Exception as ex:
+            print(f"Exception during receiving of {car_color} keys:", ex.__class__.__name__, ex)
 
 
 def main():
@@ -377,8 +382,11 @@ def main():
     publisher: zmq.Socket = context.socket(zmq.PUB)
     publisher.bind("tcp://localhost:6000")
 
-    red_car_keys_subscriber_thread = Thread(target=key_subscriber, args=(b"red_car",), daemon=True)
-    red_car_keys_subscriber_thread.start()
+    red_car_keys_thread = Thread(target=key_subscriber, args=("red",), daemon=True)
+    red_car_keys_thread.start()
+
+    blue_car_keys_thread = Thread(target=key_subscriber, args=("blue",), daemon=True)
+    blue_car_keys_thread.start()
 
     pg.init()
     win = pg.display.set_mode((1280, 768))
@@ -407,6 +415,8 @@ def main():
     pg.display.set_caption("Racer")
     clock = pg.time.Clock()
 
+    show_sensor_readings = 0
+
     while True:
         clock.tick(30)
 
@@ -415,16 +425,19 @@ def main():
                 return
 
         pressed_keys = pg.key.get_pressed()
+        just_pressed_keys = pg.key.get_just_pressed()
 
-        if pressed_keys[pg.K_r]:
+        if just_pressed_keys[pg.K_r]:
             world.reset()
+        if just_pressed_keys[pg.K_t]:
+            show_sensor_readings = (show_sensor_readings + 1) % 4
 
         world.red_car.step(
             collision_mask=COLLISION_MASK,
-            up_key=red_car_keys["u"],  # pressed_keys[pg.K_UP],
-            down_key=red_car_keys["d"],  # pressed_keys[pg.K_DOWN],
-            left_key=red_car_keys["l"],  # pressed_keys[pg.K_LEFT],
-            right_key=red_car_keys["r"],  # pressed_keys[pg.K_RIGHT],
+            up_key=car_keys["red"]["u"] or pressed_keys[pg.K_UP],
+            down_key=car_keys["red"]["d"] or pressed_keys[pg.K_DOWN],
+            left_key=car_keys["red"]["l"] or pressed_keys[pg.K_LEFT],
+            right_key=car_keys["red"]["r"] or pressed_keys[pg.K_RIGHT],
             other_car=world.blue_car,
             diamond_coords=world.diamond_coords,
             diamond_mask=DIAMOND_MASK,
@@ -433,10 +446,10 @@ def main():
         )
         world.blue_car.step(
             collision_mask=COLLISION_MASK,
-            up_key=pressed_keys[pg.K_w],
-            down_key=pressed_keys[pg.K_s],
-            left_key=pressed_keys[pg.K_a],
-            right_key=pressed_keys[pg.K_d],
+            up_key=car_keys["blue"]["u"] or pressed_keys[pg.K_w],
+            down_key=car_keys["blue"]["d"] or pressed_keys[pg.K_s],
+            left_key=car_keys["blue"]["l"] or pressed_keys[pg.K_a],
+            right_key=car_keys["blue"]["r"] or pressed_keys[pg.K_d],
             other_car=world.red_car,
             diamond_coords=world.diamond_coords,
             diamond_mask=DIAMOND_MASK,
@@ -462,8 +475,10 @@ def main():
         )
 
         world.draw(win)
-        # world.draw_readings(win, world.red_car, red_car_readings)
-        # world.draw_readings(win, world.blue_car, blue_car_readings)
+        if show_sensor_readings & 1:
+            world.draw_readings(win, world.red_car, red_car_readings)
+        if show_sensor_readings & 2:
+            world.draw_readings(win, world.blue_car, blue_car_readings)
 
         win.blit(
             FONT.render(f"{world.red_car.score}", True, (192, 32, 32), (0, 0, 0)),
