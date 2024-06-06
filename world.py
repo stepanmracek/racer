@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 import pygame as pg
 
+import const
 from car import Car, StepOutcome
 from utils import init_diamonds, random_pos
 
@@ -25,8 +26,8 @@ class World:
 
     def draw_readings(self, win: pg.Surface, car: Car, readings: list):
         win.blit(
-            car.sensors_mask[car.angle].to_surface(setcolor=(0, 0, 0, 32), unsetcolor=(0, 0, 0, 0)),
-            (car.x - 500, car.y - 500),
+            car.sensors.masks[car.angle].to_surface(setcolor=(0, 0, 0, 32), unsetcolor=(0, 0, 0, 0)),
+            (car.x - const.SENSORS_SIZE/2, car.y - const.SENSORS_SIZE/2),
         )
         what_color = {"w": (255, 255, 0), "e": (255, 0, 0), "d": (0, 0, 255)}
         for i, r in enumerate(readings):

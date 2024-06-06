@@ -6,7 +6,7 @@ import msgpack
 import pygame as pg
 import zmq
 
-from car import Car
+from car import Car, Sensors
 from utils import init_diamonds, scale_image
 from world import World
 
@@ -63,10 +63,11 @@ def main():
     crash_sfx.set_volume(0.5)
     font = pg.font.Font(None, 42)
 
+    sensors = Sensors.precompute()
     world = World(
         background=background_img,
-        blue_car=Car(blue_car_img, 640, 200, 180),
-        red_car=Car(red_car_img, 640, 600, 0),
+        blue_car=Car(img=blue_car_img, x=640, y=200, angle=180, sensors=sensors),
+        red_car=Car(img=red_car_img, x=640, y=600, angle=0, sensors=sensors),
         diamond_image=diamond_img,
         diamond_coords=init_diamonds(spawn_mask),
         spawn_mask=spawn_mask,
