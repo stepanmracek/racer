@@ -17,11 +17,11 @@ class World:
     red_car: Car
     diamond_image: pg.Surface
     diamond_mask: pg.Mask
-    diamond_sfx: pg.mixer.Sound
+    diamond_sfx: Optional[pg.mixer.Sound]
     diamond_coords: set[tuple[int, int]]
-    crash_sfx: pg.mixer.Sound
+    crash_sfx: Optional[pg.mixer.Sound]
     spawn_mask: pg.Mask
-    font: pg.Font
+    font: Optional[pg.Font]
 
     def reset(self):
         self.red_car.reset()
@@ -78,22 +78,28 @@ class World:
         if blue_car_readings:
             self.draw_readings(win, self.blue_car, blue_car_readings)
 
-        win.blit(
-            self.font.render(f"{self.red_car.score}", True, (192, 32, 32), (0, 0, 0)),
-            (win.get_width() / 2 - 50, win.get_height() - 36),
-        )
-        win.blit(
-            self.font.render(f"{self.blue_car.score}", True, (32, 32, 192), (0, 0, 0)),
-            (win.get_width() / 2 + 50, win.get_height() - 36),
-        )
+        if self.font:
+            win.blit(
+                self.font.render(f"{self.red_car.score}", True, (192, 32, 32), (0, 0, 0)),
+                (win.get_width() / 2 - 50, win.get_height() - 36),
+            )
+            win.blit(
+                self.font.render(f"{self.blue_car.score}", True, (32, 32, 192), (0, 0, 0)),
+                (win.get_width() / 2 + 50, win.get_height() - 36),
+            )
 
     def process_step_outcome(self, step_outcome: StepOutcome):
         if step_outcome.collected_diamond:
-            self.diamond_sfx.play()
+            if self.diamond_sfx:
+                self.diamond_sfx.play()
             self.diamond_coords.remove(step_outcome.collected_diamond)
             self.diamond_coords.add(random_pos(self.spawn_mask))
 
-        if step_outcome.crash_velocity and abs(step_outcome.crash_velocity) > 1.0:
+        if (
+            step_outcome.crash_velocity
+            and abs(step_outcome.crash_velocity) > 1.0
+            and self.crash_sfx
+        ):
             self.crash_sfx.play()
 
     def step(
@@ -139,21 +145,20 @@ class World:
         )
 
     @classmethod
-    def create(cls, level: str):
-        red_car_img = scale_image(pg.image.load("assets/cars/red.png").convert_alpha(), 0.75)
-        blue_car_img = scale_image(pg.image.load("assets/cars/blue.png").convert_alpha(), 0.75)
-        background_img = pg.image.load(f"assets/maps/{level}/bg.png").convert()
-        collision_img = pg.image.load(f"assets/maps/{level}/map.png").convert_alpha()
+    def create(cls, level: str, headless: bool = False):
+        red_car_img = scale_image(pg.image.load("assets/cars/red.png"), 0.75)
+        blue_car_img = scale_image(pg.image.load("assets/cars/blue.png"), 0.75)
+        background_img = pg.image.load(f"assets/maps/{level}/bg.png")
+        collision_img = pg.image.load(f"assets/maps/{level}/map.png")
         background_img.blit(collision_img, (0, 0))
-        spawn_mask = pg.mask.from_surface(
-            pg.image.load(f"assets/maps/{level}/spawn-mask.png").convert_alpha()
-        )
+        spawn_mask = pg.mask.from_surface(pg.image.load(f"assets/maps/{level}/spawn-mask.png"))
         collision_mask = pg.mask.from_surface(collision_img)
-        diamond_img = pg.image.load("assets/diamond.png").convert_alpha()
+        diamond_img = pg.image.load("assets/diamond.png")
         diamond_mask = pg.mask.from_surface(diamond_img)
-        diamond_sfx = pg.mixer.Sound("assets/sound/money.mp3")
-        crash_sfx = pg.mixer.Sound("assets/sound/crash.mp3")
-        crash_sfx.set_volume(0.5)
+        diamond_sfx = None if headless else pg.mixer.Sound("assets/sound/money.mp3")
+        crash_sfx = None if headless else pg.mixer.Sound("assets/sound/crash.mp3")
+        if not headless:
+            crash_sfx.set_volume(0.5)
 
         sensors = Sensors.precompute()
         return World(
@@ -167,5 +172,5 @@ class World:
             spawn_mask=spawn_mask,
             diamond_sfx=diamond_sfx,
             crash_sfx=crash_sfx,
-            font=pg.font.Font(None, 42),
+            font=None if headless else pg.font.Font(None, 42),
         )
