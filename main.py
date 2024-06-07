@@ -32,6 +32,8 @@ def main():
     arg_parser = ArgumentParser()
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
     arg_parser.add_argument("--fps", default=30, type=int)
+    arg_parser.add_argument("--timelimit", default=60, type=int)
+    arg_parser.add_argument("--scorelimit", default=10, type=int)
     args = arg_parser.parse_args()
 
     context = zmq.Context.instance()
@@ -51,8 +53,9 @@ def main():
     clock = pg.time.Clock()
 
     show_sensor_readings = 0
-
-    while True:
+    frame_limit = args.timelimit * args.fps
+    frame = 0
+    while frame < frame_limit:
         clock.tick(args.fps)
 
         for event in pg.event.get():
@@ -78,6 +81,9 @@ def main():
             blue_right=car_keys["blue"]["r"] or pressed_keys[pg.K_d],
         )
 
+        if world.red_car.score >= args.scorelimit or world.blue_car.score >= args.scorelimit:
+            break
+
         publisher.send(
             b"red_car"
             + msgpack.packb({"sensors": red_car_readings, "velocity": world.red_car.velocity})
@@ -93,7 +99,10 @@ def main():
             red_car_readings=red_car_readings if show_sensor_readings & 1 else None,
             blue_car_readings=blue_car_readings if show_sensor_readings & 2 else None,
         )
+        time_left = frame/frame_limit*1280
+        pg.draw.rect(win, (255,255,0), (0, 760, time_left, 768))
         pg.display.update()
+        frame += 1
 
 
 if __name__ == "__main__":
