@@ -15,6 +15,7 @@ class StepOutcome:
     crash_velocity: Optional[float] = None
     collected_diamond: Optional[tuple[int, int]] = False
 
+
 @dataclass
 class Sensors:
     masks: dict[int, pg.Mask]
@@ -29,7 +30,7 @@ class Sensors:
         pg.draw.ellipse(
             sensors_img,
             (0, 0, 0, 255),
-            (const.SENSORS_SIZE/4, 0, const.SENSORS_SIZE/2, const.SENSORS_SIZE*0.75)
+            (const.SENSORS_SIZE / 4, 0, const.SENSORS_SIZE / 2, const.SENSORS_SIZE * 0.75),
         )
         for angle in tqdm(
             range(0, 360, const.ROTATION_VELOCITY), desc="Pre-computing sensors mask and rays"
@@ -37,8 +38,8 @@ class Sensors:
             rotated_sensors_img = pg.transform.rotate(sensors_img, angle)
             rotated_sensors_img = rotated_sensors_img.subsurface(
                 (
-                    rotated_sensors_img.get_width() / 2 - const.SENSORS_SIZE/2,
-                    rotated_sensors_img.get_height() / 2 - const.SENSORS_SIZE/2,
+                    rotated_sensors_img.get_width() / 2 - const.SENSORS_SIZE / 2,
+                    rotated_sensors_img.get_height() / 2 - const.SENSORS_SIZE / 2,
                     const.SENSORS_SIZE,
                     const.SENSORS_SIZE,
                 )
@@ -51,9 +52,9 @@ class Sensors:
                 dy = -math.cos(radians)
                 dx = -math.sin(radians)
                 distance = 0
-                x = const.SENSORS_SIZE/2
-                y = const.SENSORS_SIZE/2
-                while distance < const.SENSORS_SIZE/2:
+                x = const.SENSORS_SIZE / 2
+                y = const.SENSORS_SIZE / 2
+                while distance < const.SENSORS_SIZE / 2:
                     if x < 0.0 or y < 0.0 or x >= const.SENSORS_SIZE or y >= const.SENSORS_SIZE:
                         break
                     if not mask.get_at((x, y)):
@@ -237,15 +238,19 @@ class Car:
     def is_object_in_range(
         self, object_x, object_y, sensors_mask: pg.Mask, angle_step
     ) -> Optional[tuple[int, int]]:
-        x = int(object_x - self.x) + const.SENSORS_SIZE//2
-        y = int(object_y - self.y) + const.SENSORS_SIZE//2
-        if 0 <= x < const.SENSORS_SIZE and 0 <= y < const.SENSORS_SIZE and sensors_mask.get_at((x, y)):
-            x -= const.SENSORS_SIZE/2
-            y -= const.SENSORS_SIZE/2
+        x = int(object_x - self.x) + const.SENSORS_SIZE // 2
+        y = int(object_y - self.y) + const.SENSORS_SIZE // 2
+        if (
+            0 <= x < const.SENSORS_SIZE
+            and 0 <= y < const.SENSORS_SIZE
+            and sensors_mask.get_at((x, y))
+        ):
+            x -= const.SENSORS_SIZE / 2
+            y -= const.SENSORS_SIZE / 2
             distance = int(math.hypot(x, y))
             angle = (
-                        (-(self.angle - (90 - math.degrees(math.atan2(-y, -x))))) + angle_step / 2
-                    ) % 360
+                (-(self.angle - (90 - math.degrees(math.atan2(-y, -x))))) + angle_step / 2
+            ) % 360
             return int(angle), distance
 
     def sensor_readings(
@@ -259,7 +264,7 @@ class Car:
         # wall collisions
         readings = [None for _ in range(0, 360, const.SENSORS_ANGLE_STEP)]
         collisions = m.overlap_mask(
-            collision_mask, (-self.x + const.SENSORS_SIZE/2, -self.y + const.SENSORS_SIZE/2)
+            collision_mask, (-self.x + const.SENSORS_SIZE / 2, -self.y + const.SENSORS_SIZE / 2)
         )
 
         for i, ray in enumerate(self.sensors.rays[self.angle]):

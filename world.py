@@ -30,8 +30,10 @@ class World:
 
     def draw_readings(self, win: pg.Surface, car: Car, readings: SensorReadings):
         win.blit(
-            car.sensors.masks[car.angle].to_surface(setcolor=(0, 0, 0, 32), unsetcolor=(0, 0, 0, 0)),
-            (car.x - const.SENSORS_SIZE/2, car.y - const.SENSORS_SIZE/2),
+            car.sensors.masks[car.angle].to_surface(
+                setcolor=(0, 0, 0, 32), unsetcolor=(0, 0, 0, 0)
+            ),
+            (car.x - const.SENSORS_SIZE / 2, car.y - const.SENSORS_SIZE / 2),
         )
         what_color = {"w": (255, 255, 0), "e": (255, 0, 0), "d": (0, 0, 255)}
         for i, r in enumerate(readings):
@@ -58,8 +60,8 @@ class World:
     def draw(
         self,
         win: pg.Surface,
-        red_car_readings: Optional[SensorReadings],
-        blue_car_readings: Optional[SensorReadings]
+        red_car_readings: Optional[SensorReadings] = None,
+        blue_car_readings: Optional[SensorReadings] = None,
     ):
         win.blit(self.background, (0, 0))
 
@@ -93,7 +95,7 @@ class World:
 
         if step_outcome.crash_velocity and abs(step_outcome.crash_velocity) > 1.0:
             self.crash_sfx.play()
-    
+
     def step(
         self,
         red_up: bool,
@@ -132,14 +134,9 @@ class World:
         )
 
         return (
-            self.red_car.sensor_readings(
-                self.collision_mask, self.blue_car, self.diamond_coords
-            ),
-            self.blue_car.sensor_readings(
-                self.collision_mask, self.red_car, self.diamond_coords
-            )
+            self.red_car.sensor_readings(self.collision_mask, self.blue_car, self.diamond_coords),
+            self.blue_car.sensor_readings(self.collision_mask, self.red_car, self.diamond_coords),
         )
-
 
     @classmethod
     def create(cls, level: str):
@@ -172,5 +169,3 @@ class World:
             crash_sfx=crash_sfx,
             font=pg.font.Font(None, 42),
         )
-
-        

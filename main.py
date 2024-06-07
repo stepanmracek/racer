@@ -19,7 +19,7 @@ def key_subscriber(car_color: Literal["red", "blue"]):
     subscriber: zmq.Socket = context.socket(zmq.SUB)
     subscriber.setsockopt(zmq.CONFLATE, 1)
     subscriber.connect(f"tcp://localhost:{6001 if car_color == 'red' else 6002}")
-    subscriber.setsockopt(zmq.SUBSCRIBE, b'')
+    subscriber.setsockopt(zmq.SUBSCRIBE, b"")
     global car_keys
     while True:
         try:
@@ -67,6 +67,7 @@ def main():
 
         if just_pressed_keys[pg.K_r]:
             world.reset()
+            frame = 0
         if just_pressed_keys[pg.K_t]:
             show_sensor_readings = (show_sensor_readings + 1) % 4
 
@@ -99,8 +100,8 @@ def main():
             red_car_readings=red_car_readings if show_sensor_readings & 1 else None,
             blue_car_readings=blue_car_readings if show_sensor_readings & 2 else None,
         )
-        time_left = frame/frame_limit*1280
-        pg.draw.rect(win, (255,255,0), (0, 760, time_left, 768))
+        time_left = frame / frame_limit * 1280
+        pg.draw.rect(win, (255, 255, 0), (0, 760, time_left, 768))
         pg.display.update()
         frame += 1
 
