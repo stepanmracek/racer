@@ -1,6 +1,5 @@
 import argparse
 import csv
-import json
 import math
 
 import msgpack
@@ -12,6 +11,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--car", default="red", choices=["red", "blue"])
     parser.add_argument("--output")
+    parser.add_argument("--fps", default=30, type=int)
     args = parser.parse_args()
     topic: bytes = args.car.encode() + b"_car"
 
@@ -38,7 +38,7 @@ def main():
 
     last_velocity_zero = True
     while True:
-        clock.tick(30)
+        clock.tick(args.fps)
         quit_event = next((event for event in pg.event.get() if event.type == pg.QUIT), None)
         if quit_event:
             break
