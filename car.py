@@ -7,6 +7,8 @@ from tqdm import tqdm
 
 import const
 
+SensorReadings = list[Optional[tuple[Literal["w", "d", "e"], int]]]
+
 
 @dataclass
 class StepOutcome:
@@ -251,7 +253,7 @@ class Car:
         collision_mask: pg.Mask,
         other_car: "Car",
         diamond_coords: set[tuple[int, int]],
-    ) -> list[Optional[tuple[Literal["w", "d", "e"], int]]]:
+    ) -> SensorReadings:
         m: pg.Mask = self.sensors.masks[self.angle]
 
         # wall collisions

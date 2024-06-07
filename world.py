@@ -1,30 +1,34 @@
 import math
 from dataclasses import dataclass
+from typing import Optional
 
 import pygame as pg
 
 import const
-from car import Car, StepOutcome
-from utils import init_diamonds, random_pos
+from car import Car, Sensors, SensorReadings, StepOutcome
+from utils import init_diamonds, random_pos, scale_image
 
 
 @dataclass
 class World:
     background: pg.Surface
+    collision_mask: pg.Mask
     blue_car: Car
     red_car: Car
     diamond_image: pg.Surface
+    diamond_mask: pg.Mask
     diamond_sfx: pg.mixer.Sound
     diamond_coords: set[tuple[int, int]]
     crash_sfx: pg.mixer.Sound
     spawn_mask: pg.Mask
+    font: pg.Font
 
     def reset(self):
         self.red_car.reset()
         self.blue_car.reset()
         self.diamond_coords = init_diamonds(self.spawn_mask)
 
-    def draw_readings(self, win: pg.Surface, car: Car, readings: list):
+    def draw_readings(self, win: pg.Surface, car: Car, readings: SensorReadings):
         win.blit(
             car.sensors.masks[car.angle].to_surface(setcolor=(0, 0, 0, 32), unsetcolor=(0, 0, 0, 0)),
             (car.x - const.SENSORS_SIZE/2, car.y - const.SENSORS_SIZE/2),
@@ -51,7 +55,12 @@ class World:
                 3 if what == "w" else 5,
             )
 
-    def draw(self, win: pg.Surface):
+    def draw(
+        self,
+        win: pg.Surface,
+        red_car_readings: Optional[SensorReadings],
+        blue_car_readings: Optional[SensorReadings]
+    ):
         win.blit(self.background, (0, 0))
 
         dhw = self.diamond_image.get_width() / 2
@@ -62,6 +71,20 @@ class World:
         self.red_car.draw(win)
         self.blue_car.draw(win)
 
+        if red_car_readings:
+            self.draw_readings(win, self.red_car, red_car_readings)
+        if blue_car_readings:
+            self.draw_readings(win, self.blue_car, blue_car_readings)
+
+        win.blit(
+            self.font.render(f"{self.red_car.score}", True, (192, 32, 32), (0, 0, 0)),
+            (win.get_width() / 2 - 50, win.get_height() - 36),
+        )
+        win.blit(
+            self.font.render(f"{self.blue_car.score}", True, (32, 32, 192), (0, 0, 0)),
+            (win.get_width() / 2 + 50, win.get_height() - 36),
+        )
+
     def process_step_outcome(self, step_outcome: StepOutcome):
         if step_outcome.collected_diamond:
             self.diamond_sfx.play()
@@ -70,3 +93,84 @@ class World:
 
         if step_outcome.crash_velocity and abs(step_outcome.crash_velocity) > 1.0:
             self.crash_sfx.play()
+    
+    def step(
+        self,
+        red_up: bool,
+        red_down: bool,
+        red_left: bool,
+        red_right: bool,
+        blue_up: bool,
+        blue_down: bool,
+        blue_left: bool,
+        blue_right: bool,
+    ) -> tuple[SensorReadings, SensorReadings]:
+        self.process_step_outcome(
+            self.red_car.step(
+                collision_mask=self.collision_mask,
+                up_key=red_up,
+                down_key=red_down,
+                left_key=red_left,
+                right_key=red_right,
+                other_car=self.blue_car,
+                diamond_coords=self.diamond_coords,
+                diamond_mask=self.diamond_mask,
+            )
+        )
+
+        self.process_step_outcome(
+            self.blue_car.step(
+                collision_mask=self.collision_mask,
+                up_key=blue_up,
+                down_key=blue_down,
+                left_key=blue_left,
+                right_key=blue_right,
+                other_car=self.red_car,
+                diamond_coords=self.diamond_coords,
+                diamond_mask=self.diamond_mask,
+            )
+        )
+
+        return (
+            self.red_car.sensor_readings(
+                self.collision_mask, self.blue_car, self.diamond_coords
+            ),
+            self.blue_car.sensor_readings(
+                self.collision_mask, self.red_car, self.diamond_coords
+            )
+        )
+
+
+    @classmethod
+    def create(cls, level: str):
+        red_car_img = scale_image(pg.image.load("assets/cars/red.png").convert_alpha(), 0.75)
+        blue_car_img = scale_image(pg.image.load("assets/cars/blue.png").convert_alpha(), 0.75)
+        background_img = pg.image.load(f"assets/maps/{level}/bg.png").convert()
+        collision_img = pg.image.load(f"assets/maps/{level}/map.png").convert_alpha()
+        background_img.blit(collision_img, (0, 0))
+        spawn_mask = pg.mask.from_surface(
+            pg.image.load(f"assets/maps/{level}/spawn-mask.png").convert_alpha()
+        )
+        collision_mask = pg.mask.from_surface(collision_img)
+        diamond_img = pg.image.load("assets/diamond.png").convert_alpha()
+        diamond_mask = pg.mask.from_surface(diamond_img)
+        diamond_sfx = pg.mixer.Sound("assets/sound/money.mp3")
+        crash_sfx = pg.mixer.Sound("assets/sound/crash.mp3")
+        crash_sfx.set_volume(0.5)
+
+        sensors = Sensors.precompute()
+        return World(
+            background=background_img,
+            collision_mask=collision_mask,
+            blue_car=Car(img=blue_car_img, x=640, y=200, angle=180, sensors=sensors),
+            red_car=Car(img=red_car_img, x=640, y=600, angle=0, sensors=sensors),
+            diamond_image=diamond_img,
+            diamond_mask=diamond_mask,
+            diamond_coords=init_diamonds(spawn_mask),
+            spawn_mask=spawn_mask,
+            diamond_sfx=diamond_sfx,
+            crash_sfx=crash_sfx,
+            font=pg.font.Font(None, 42),
+        )
+
+        
