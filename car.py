@@ -25,12 +25,13 @@ class Sensors:
     def precompute(cls) -> "Sensors":
         masks = {}
         rays = {}
+        sensors_half = const.SENSORS_SIZE // 2
         sensors_img = pg.Surface((const.SENSORS_SIZE, const.SENSORS_SIZE), pg.SRCALPHA)
         sensors_img.fill((0, 0, 0, 0))
         pg.draw.ellipse(
             sensors_img,
             (0, 0, 0, 255),
-            (const.SENSORS_SIZE / 4, 0, const.SENSORS_SIZE / 2, const.SENSORS_SIZE * 0.75),
+            (const.SENSORS_SIZE // 4, 0, sensors_half, const.SENSORS_SIZE * 0.75),
         )
         for angle in tqdm(
             range(0, 360, const.ROTATION_VELOCITY), desc="Pre-computing sensors mask and rays"
@@ -38,8 +39,8 @@ class Sensors:
             rotated_sensors_img = pg.transform.rotate(sensors_img, angle)
             rotated_sensors_img = rotated_sensors_img.subsurface(
                 (
-                    rotated_sensors_img.get_width() / 2 - const.SENSORS_SIZE / 2,
-                    rotated_sensors_img.get_height() / 2 - const.SENSORS_SIZE / 2,
+                    rotated_sensors_img.get_width() / 2 - sensors_half,
+                    rotated_sensors_img.get_height() / 2 - sensors_half,
                     const.SENSORS_SIZE,
                     const.SENSORS_SIZE,
                 )
@@ -48,19 +49,23 @@ class Sensors:
             masks[angle] = mask
             rays[angle] = [[] for _ in range(0, 360, const.SENSORS_ANGLE_STEP)]
             for i, ray_orientation in enumerate(range(0, 360, const.SENSORS_ANGLE_STEP)):
+                old = (0, 0, 0.0)
                 radians = math.radians(angle + ray_orientation)
                 dy = -math.cos(radians)
                 dx = -math.sin(radians)
                 distance = 0
-                x = const.SENSORS_SIZE / 2
-                y = const.SENSORS_SIZE / 2
-                while distance < const.SENSORS_SIZE / 2:
+                x = sensors_half
+                y = sensors_half
+                while distance < sensors_half:
                     if x < 0.0 or y < 0.0 or x >= const.SENSORS_SIZE or y >= const.SENSORS_SIZE:
                         break
                     if not mask.get_at((x, y)):
                         break
 
-                    rays[angle][i].append((int(x), int(y)))
+                    new = (int(x), int(y), distance)
+                    if new[:2] != old[:2]:
+                        rays[angle][i].append(new)
+                        old = new
                     x = x + dx
                     y = y + dy
                     distance += 1
@@ -269,7 +274,7 @@ class Car:
         )
 
         for i, ray in enumerate(self.sensors.rays[self.angle]):
-            for distance, (x, y) in enumerate(ray):
+            for x, y, distance in ray:
                 if collisions.get_at((x, y)):
                     readings[i] = ("w", distance)
                     break
