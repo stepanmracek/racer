@@ -50,7 +50,7 @@ def main():
         onnx_input = np.array([np.concatenate((velocity, walls, diamants))])
 
         onnx_output = onnx_session.run(["output_0"], {"input": onnx_input})[0][0]
-        print(onnx_output)
+        # print(onnx_output)
 
         # hack to not stop and wait until the end of the time if we have zero velocity
         # and the network decides to not move at all
