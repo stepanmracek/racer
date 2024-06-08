@@ -40,7 +40,7 @@ class World:
             if not r:
                 continue
             what, distance = r
-            radians = math.radians(car.angle + i * 15)
+            radians = math.radians(car.angle + i * const.SENSORS_ANGLE_STEP)
             dy = -math.cos(radians)
             dx = -math.sin(radians)
 
