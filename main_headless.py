@@ -3,6 +3,7 @@ from argparse import ArgumentParser
 import msgpack
 import pygame as pg
 import zmq
+from tqdm import tqdm
 
 from world import World
 
@@ -36,9 +37,7 @@ def main():
     pg.display.set_caption("Racer")
     world = World.create(args.level, headless=True)
 
-    frame_limit = args.timelimit * 30
-    frame = 0
-    while frame < frame_limit:
+    for frame in tqdm(range(args.timelimit * 30), desc="Game progress"):
         red_car_readings, blue_car_readings = world.step(
             red_up=car_keys["red"]["u"],
             red_down=car_keys["red"]["d"],
