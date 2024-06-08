@@ -150,15 +150,23 @@ class World:
         blue_car_img = scale_image(pg.image.load("assets/cars/blue.png"), 0.75)
         background_img = pg.image.load(f"assets/maps/{level}/bg.png")
         collision_img = pg.image.load(f"assets/maps/{level}/map.png")
-        background_img.blit(collision_img, (0, 0))
-        spawn_mask = pg.mask.from_surface(pg.image.load(f"assets/maps/{level}/spawn-mask.png"))
-        collision_mask = pg.mask.from_surface(collision_img)
+        spawn_image = pg.image.load(f"assets/maps/{level}/spawn-mask.png")
         diamond_img = pg.image.load("assets/diamond.png")
-        diamond_mask = pg.mask.from_surface(diamond_img)
         diamond_sfx = None if headless else pg.mixer.Sound("assets/sound/money.mp3")
         crash_sfx = None if headless else pg.mixer.Sound("assets/sound/crash.mp3")
         if not headless:
+            red_car_img = red_car_img.convert_alpha()
+            blue_car_img = blue_car_img.convert_alpha()
+            background_img = background_img.convert()
+            collision_img = collision_img.convert_alpha()
+            spawn_image = spawn_image.convert_alpha()
+            diamond_img = diamond_img.convert_alpha()
             crash_sfx.set_volume(0.5)
+
+        background_img.blit(collision_img, (0, 0))
+        collision_mask = pg.mask.from_surface(collision_img)
+        spawn_mask = pg.mask.from_surface(spawn_image)
+        diamond_mask = pg.mask.from_surface(diamond_img)
 
         sensors = Sensors.precompute()
         return World(

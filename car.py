@@ -238,15 +238,16 @@ class Car:
     def is_object_in_range(
         self, object_x, object_y, sensors_mask: pg.Mask, angle_step
     ) -> Optional[tuple[int, int]]:
-        x = int(object_x - self.x) + const.SENSORS_SIZE // 2
-        y = int(object_y - self.y) + const.SENSORS_SIZE // 2
+        sensors_half = const.SENSORS_SIZE / 2
+        x = int(object_x - self.x) + sensors_half
+        y = int(object_y - self.y) + sensors_half
         if (
             0 <= x < const.SENSORS_SIZE
             and 0 <= y < const.SENSORS_SIZE
             and sensors_mask.get_at((x, y))
         ):
-            x -= const.SENSORS_SIZE / 2
-            y -= const.SENSORS_SIZE / 2
+            x -= sensors_half
+            y -= sensors_half
             distance = int(math.hypot(x, y))
             angle = (
                 (-(self.angle - (90 - math.degrees(math.atan2(-y, -x))))) + angle_step / 2
