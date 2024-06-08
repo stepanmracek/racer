@@ -62,8 +62,6 @@ def main():
             + msgpack.packb({"sensors": blue_car_readings, "velocity": world.blue_car.velocity})
         )
 
-        frame += 1
-
         car_keys["red"] = msgpack.loads(red_subscriber.recv())
         car_keys["blue"] = msgpack.loads(blue_subscriber.recv())
 
