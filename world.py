@@ -1,12 +1,19 @@
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
+import numpy as np
 import pygame as pg
 
 import const
 from car import Car, Sensors, SensorReadings, StepOutcome
 from utils import init_diamonds, random_pos, scale_image
+
+
+@dataclass
+class WorldStepOutcome:
+    red_car: tuple[SensorReadings, StepOutcome]
+    blue_car: tuple[SensorReadings, StepOutcome]
 
 
 @dataclass
@@ -22,6 +29,12 @@ class World:
     crash_sfx: Optional[pg.mixer.Sound]
     spawn_mask: pg.Mask
     font: Optional[pg.Font]
+
+    collision_matrix: np.ndarray = field(init=False)
+
+    def __post_init__(self):
+        collision_surface = self.collision_mask.to_surface()
+        self.collision_matrix = pg.surfarray.array_red(collision_surface) > 127
 
     def reset(self):
         self.red_car.reset()
@@ -112,36 +125,40 @@ class World:
         blue_down: bool,
         blue_left: bool,
         blue_right: bool,
-    ) -> tuple[SensorReadings, SensorReadings]:
-        self.process_step_outcome(
-            self.red_car.step(
-                collision_mask=self.collision_mask,
-                up_key=red_up,
-                down_key=red_down,
-                left_key=red_left,
-                right_key=red_right,
-                other_car=self.blue_car,
-                diamond_coords=self.diamond_coords,
-                diamond_mask=self.diamond_mask,
-            )
+    ) -> WorldStepOutcome:
+        red_car_step_outcome = self.red_car.step(
+            collision_mask=self.collision_mask,
+            up_key=red_up,
+            down_key=red_down,
+            left_key=red_left,
+            right_key=red_right,
+            other_car=self.blue_car,
+            diamond_coords=self.diamond_coords,
+            diamond_mask=self.diamond_mask,
         )
+        self.process_step_outcome(red_car_step_outcome)
 
-        self.process_step_outcome(
-            self.blue_car.step(
-                collision_mask=self.collision_mask,
-                up_key=blue_up,
-                down_key=blue_down,
-                left_key=blue_left,
-                right_key=blue_right,
-                other_car=self.red_car,
-                diamond_coords=self.diamond_coords,
-                diamond_mask=self.diamond_mask,
-            )
+        blue_car_step_outcome = self.blue_car.step(
+            collision_mask=self.collision_mask,
+            up_key=blue_up,
+            down_key=blue_down,
+            left_key=blue_left,
+            right_key=blue_right,
+            other_car=self.red_car,
+            diamond_coords=self.diamond_coords,
+            diamond_mask=self.diamond_mask,
         )
+        self.process_step_outcome(blue_car_step_outcome)
 
-        return (
-            self.red_car.sensor_readings(self.collision_mask, self.blue_car, self.diamond_coords),
-            self.blue_car.sensor_readings(self.collision_mask, self.red_car, self.diamond_coords),
+        red_car_readings = self.red_car.sensor_readings(
+            self.collision_matrix, self.blue_car, self.diamond_coords
+        )
+        blue_car_readings = self.blue_car.sensor_readings(
+            self.collision_matrix, self.red_car, self.diamond_coords
+        )
+        return WorldStepOutcome(
+            red_car=[red_car_readings, red_car_step_outcome],
+            blue_car=[blue_car_readings, blue_car_step_outcome],
         )
 
     @classmethod

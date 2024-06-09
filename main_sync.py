@@ -51,7 +51,7 @@ def main():
             world.reset()
             frame = 0
 
-        red_car_readings, blue_car_readings = world.step(
+        outcome = world.step(
             red_up=car_keys["red"]["u"],
             red_down=car_keys["red"]["d"],
             red_left=car_keys["red"]["l"],
@@ -67,12 +67,12 @@ def main():
 
         publisher.send(
             b"red_car"
-            + msgpack.packb({"sensors": red_car_readings, "velocity": world.red_car.velocity})
+            + msgpack.packb({"sensors": outcome.red_car[0], "velocity": world.red_car.velocity})
         )
 
         publisher.send(
             b"blue_car"
-            + msgpack.packb({"sensors": blue_car_readings, "velocity": world.blue_car.velocity})
+            + msgpack.packb({"sensors": outcome.blue_car[0], "velocity": world.blue_car.velocity})
         )
 
         world.draw(win=win)

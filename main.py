@@ -71,7 +71,7 @@ def main():
         if just_pressed_keys[pg.K_t]:
             show_sensor_readings = (show_sensor_readings + 1) % 4
 
-        red_car_readings, blue_car_readings = world.step(
+        outcome = world.step(
             red_up=car_keys["red"]["u"] or pressed_keys[pg.K_UP],
             red_down=car_keys["red"]["d"] or pressed_keys[pg.K_DOWN],
             red_left=car_keys["red"]["l"] or pressed_keys[pg.K_LEFT],
@@ -87,18 +87,18 @@ def main():
 
         publisher.send(
             b"red_car"
-            + msgpack.packb({"sensors": red_car_readings, "velocity": world.red_car.velocity})
+            + msgpack.packb({"sensors": outcome.red_car[0], "velocity": world.red_car.velocity})
         )
 
         publisher.send(
             b"blue_car"
-            + msgpack.packb({"sensors": blue_car_readings, "velocity": world.blue_car.velocity})
+            + msgpack.packb({"sensors": outcome.blue_car[0], "velocity": world.blue_car.velocity})
         )
 
         world.draw(
             win=win,
-            red_car_readings=red_car_readings if show_sensor_readings & 1 else None,
-            blue_car_readings=blue_car_readings if show_sensor_readings & 2 else None,
+            red_car_readings=outcome.red_car[0] if show_sensor_readings & 1 else None,
+            blue_car_readings=outcome.blue_car[0] if show_sensor_readings & 2 else None,
         )
         time_left = frame / frame_limit * 1280
         pg.draw.rect(win, (255, 255, 0), (0, 760, time_left, 768))

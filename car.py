@@ -2,6 +2,7 @@ import math
 from dataclasses import dataclass, field
 from typing import Optional, Literal
 
+import numpy as np
 import pygame as pg
 from tqdm import tqdm
 
@@ -13,7 +14,7 @@ SensorReadings = list[Optional[tuple[Literal["w", "d", "e"], int]]]
 @dataclass
 class StepOutcome:
     crash_velocity: Optional[float] = None
-    collected_diamond: Optional[tuple[int, int]] = False
+    collected_diamond: Optional[tuple[int, int]] = None
 
 
 @dataclass
@@ -49,7 +50,7 @@ class Sensors:
             masks[angle] = mask
             rays[angle] = [[] for _ in range(0, 360, const.SENSORS_ANGLE_STEP)]
             for i, ray_orientation in enumerate(range(0, 360, const.SENSORS_ANGLE_STEP)):
-                old = (0, 0, 0.0)
+                old = (None, None, None)
                 radians = math.radians(angle + ray_orientation)
                 dy = -math.cos(radians)
                 dx = -math.sin(radians)
@@ -62,7 +63,7 @@ class Sensors:
                     if not mask.get_at((x, y)):
                         break
 
-                    new = (int(x), int(y), distance)
+                    new = (int(x) - sensors_half, int(y) - sensors_half, distance)
                     if new[:2] != old[:2]:
                         rays[angle][i].append(new)
                         old = new
@@ -261,21 +262,25 @@ class Car:
 
     def sensor_readings(
         self,
-        collision_mask: pg.Mask,
+        collision_matrix: np.ndarray,
         other_car: "Car",
         diamond_coords: set[tuple[int, int]],
     ) -> SensorReadings:
         m: pg.Mask = self.sensors.masks[self.angle]
+        readings = [None for _ in range(0, 360, const.SENSORS_ANGLE_STEP)]
 
         # wall collisions
-        readings = [None for _ in range(0, 360, const.SENSORS_ANGLE_STEP)]
-        collisions = m.overlap_mask(
-            collision_mask, (-self.x + const.SENSORS_SIZE / 2, -self.y + const.SENSORS_SIZE / 2)
-        )
-
+        collision_width, colision_height = collision_matrix.shape
+        self_x = int(self.x)
+        self_y = int(self.y)
         for i, ray in enumerate(self.sensors.rays[self.angle]):
             for x, y, distance in ray:
-                if collisions.get_at((x, y)):
+                x = x + self_x
+                y = y + self_y
+                if x < 0 or y < 0 or x > collision_width or y > colision_height:
+                    break
+
+                if collision_matrix[x, y]:
                     readings[i] = ("w", distance)
                     break
 
