@@ -164,7 +164,9 @@ class World:
     @classmethod
     def create(cls, level: str, headless: bool = False):
         red_car_img = scale_image(pg.image.load("assets/cars/red.png"), 0.75)
+        red_spawn_mask = pg.mask.from_surface(pg.image.load(f"assets/maps/{level}/red-start.png"))
         blue_car_img = scale_image(pg.image.load("assets/cars/blue.png"), 0.75)
+        blue_spawn_mask = pg.mask.from_surface(pg.image.load(f"assets/maps/{level}/blue-start.png"))
         background_img = pg.image.load(f"assets/maps/{level}/bg.png")
         collision_img = pg.image.load(f"assets/maps/{level}/map.png")
         spawn_image = pg.image.load(f"assets/maps/{level}/spawn-mask.png")
@@ -189,8 +191,8 @@ class World:
         return World(
             background=background_img,
             collision_mask=collision_mask,
-            blue_car=Car(img=blue_car_img, x=640, y=200, angle=180, sensors=sensors),
-            red_car=Car(img=red_car_img, x=640, y=600, angle=0, sensors=sensors),
+            blue_car=Car(img=blue_car_img, spawn_mask=blue_spawn_mask, sensors=sensors),
+            red_car=Car(img=red_car_img, spawn_mask=red_spawn_mask, sensors=sensors),
             diamond_image=diamond_img,
             diamond_mask=diamond_mask,
             diamond_coords=init_diamonds(spawn_mask),

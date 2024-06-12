@@ -256,9 +256,6 @@ def test():
     clock = pg.Clock()
 
     world = World.create(level=args.level)
-    random.seed(10000)
-    world.reset()
-
     model = NumpyModel.load(args.model)
     car_keys = init_keys()
 

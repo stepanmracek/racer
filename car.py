@@ -1,4 +1,5 @@
 import math
+import random
 from dataclasses import dataclass, field
 from typing import Optional, Literal
 
@@ -7,6 +8,7 @@ import pygame as pg
 from tqdm import tqdm
 
 import const
+from utils import random_pos
 
 SensorReadings = list[Optional[tuple[Literal["w", "d", "e"], int]]]
 
@@ -77,10 +79,11 @@ class Sensors:
 @dataclass
 class Car:
     img: pg.Surface
-    x: float
-    y: float
-    angle: int
+    spawn_mask: pg.Mask
     sensors: Sensors
+    x: float = field(init=False, default=0.0)
+    y: float = field(init=False, default=0.0)
+    angle: int = field(init=False, default=0)
     velocity: float = field(init=False, default=0.0)
     score: int = field(init=False, default=0)
 
@@ -88,18 +91,17 @@ class Car:
     masks: dict[int, pg.Mask] = field(init=False)
 
     def __post_init__(self):
+        self.reset()
         self.images = {
             angle: pg.transform.rotate(self.img, angle)
             for angle in range(0, 360, const.ROTATION_VELOCITY)
         }
         self.masks = {angle: pg.mask.from_surface(img) for angle, img in self.images.items()}
-        self.init_vals = {"x": self.x, "y": self.y, "velocity": self.velocity, "angle": self.angle}
 
     def reset(self):
-        self.x = self.init_vals["x"]
-        self.y = self.init_vals["y"]
-        self.velocity = self.init_vals["velocity"]
-        self.angle = self.init_vals["angle"]
+        self.x, self.y = random_pos(self.spawn_mask)
+        self.velocity = 0
+        self.angle = random.randint(0, 360 // const.ROTATION_VELOCITY - 1) * const.ROTATION_VELOCITY
         self.score = 0
 
     def draw(self, win: pg.Surface):
