@@ -2,8 +2,9 @@ import random
 import sys
 from argparse import ArgumentParser
 from dataclasses import dataclass
-from multiprocessing import Pool
 from itertools import count
+from multiprocessing import Pool
+from typing import Optional
 
 import msgpack
 import numpy as np
@@ -80,11 +81,26 @@ def sensors_to_feature_vec(velocity: float, sensors: SensorReadings) -> list[flo
     return [velocity] + parse_sensor(sensors, ("w", "e")) + parse_sensor(sensors, ("d",))
 
 
-def compute_fitness(car: Car, step_outcome: StepOutcome) -> float:
+def compute_fitness(
+    car: Car,
+    sensor_readings: SensorReadings,
+    step_outcome: StepOutcome,
+    prev_step_closest_diamond: Optional[int],
+) -> tuple[float, Optional[int]]:
     ans = 0.0
 
     if abs(car.velocity) < 0.1:
         ans -= 1.0
+
+    closest_diamond = min((r[1] for r in sensor_readings if r and r[0] == "d"), default=None)
+    if not closest_diamond:
+        ans -= -0.2
+
+    if prev_step_closest_diamond is not None and closest_diamond is not None:
+        if closest_diamond < prev_step_closest_diamond:
+            ans += 1.0
+        if prev_step_closest_diamond > closest_diamond:
+            ans -= 0.2
 
     if step_outcome.collected_diamond:
         ans += 1000.0
@@ -92,7 +108,7 @@ def compute_fitness(car: Car, step_outcome: StepOutcome) -> float:
     if step_outcome.crash_velocity:
         ans -= 100.0
 
-    return ans
+    return ans, closest_diamond
 
 
 def init_keys():
@@ -120,6 +136,8 @@ def evaluate_model(params: EvaluateParams):
     world.reset()
     car_keys = init_keys()
     fitness = 0.0
+    red_prev_diamond = None
+    blue_prev_diamond = None
     for frame in range(60 * 30):
         step_outcome = world.step(
             red_up=car_keys["red"]["u"],
@@ -132,8 +150,13 @@ def evaluate_model(params: EvaluateParams):
             blue_right=car_keys["blue"]["r"],
         )
 
-        fitness += compute_fitness(world.red_car, step_outcome.red_car[1])
-        fitness += compute_fitness(world.blue_car, step_outcome.blue_car[1])
+        f1, red_prev_diamond = compute_fitness(
+            world.red_car, *step_outcome.red_car, red_prev_diamond
+        )
+        f2, blue_prev_diamond = compute_fitness(
+            world.blue_car, *step_outcome.blue_car, blue_prev_diamond
+        )
+        fitness += f1 + f2
 
         model_input = np.array(
             [
@@ -265,6 +288,8 @@ def test():
     frame_limit = args.timelimit * 30
     frame = 0
     fitness = 0.0
+    red_prev_diamond = None
+    blue_prev_diamond = None
     while frame < frame_limit:
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -287,8 +312,13 @@ def test():
             blue_right=car_keys["blue"]["r"],
         )
 
-        fitness += compute_fitness(world.red_car, step_outcome.red_car[1])
-        fitness += compute_fitness(world.blue_car, step_outcome.blue_car[1])
+        f1, red_prev_diamond = compute_fitness(
+            world.red_car, *step_outcome.red_car, red_prev_diamond
+        )
+        f2, blue_prev_diamond = compute_fitness(
+            world.blue_car, *step_outcome.blue_car, blue_prev_diamond
+        )
+        fitness += f1 + f2
 
         if world.red_car.score >= args.scorelimit or world.blue_car.score >= args.scorelimit:
             break
