@@ -170,7 +170,7 @@ def train():
     arg_parser.add_argument("--parents-count", type=int, default=40)
     arg_parser.add_argument("--pairs-select-count", type=int, default=20)
     arg_parser.add_argument("--children-per-pair", type=int, default=9)
-    arg_parser.add_argument("--mutation", type=float, default=0.25)
+    arg_parser.add_argument("--mutation", type=float, default=0.2)
     args = arg_parser.parse_args(sys.argv[2:])
 
     initial_model = NumpyModel.load(args.initial_model)
@@ -231,7 +231,10 @@ def train():
                 # generate children
                 children = [
                     NumpyModel.crossover(
-                        parents[p1], parents[p2], inclination, mutation=args.mutation
+                        parent1=parents[p1],
+                        parent2=parents[p2],
+                        inclination=inclination,
+                        mutation=np.random.random() * args.mutation,
                     )
                     for inclination in np.linspace(0.1, 0.9, num=args.children_per_pair)
                 ]
