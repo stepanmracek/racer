@@ -89,22 +89,28 @@ def compute_fitness(
 ) -> tuple[float, Optional[int]]:
     ans = 0.0
 
+    # discourage when car is not moving
     if abs(car.velocity) < 0.1:
         ans -= 1.0
 
     closest_diamond = min((r[1] for r in sensor_readings if r and r[0] == "d"), default=None)
+    # encourage exploring
     if not closest_diamond:
         ans -= -0.2
 
     if prev_step_closest_diamond is not None and closest_diamond is not None:
+        # encourage approaching to dimaonds
         if closest_diamond < prev_step_closest_diamond:
             ans += 1.0
+        # discourage going away from diamonds
         if prev_step_closest_diamond > closest_diamond:
             ans -= 0.2
 
+    # extra price for collecting diamonds
     if step_outcome.collected_diamond:
         ans += 1000.0
 
+    # discourage crashing into walls (or other car)
     if step_outcome.crash_velocity:
         ans -= 100.0
 
