@@ -40,6 +40,24 @@ class NumpyModel:
     def std(self):
         return tuple(w.std() for w in self.weights)
 
+    @staticmethod
+    def diversity(models: list["NumpyModel"]) -> np.ndarray:
+        """
+        For each weight matrix computes average std. deviation among all weights in all models
+        """
+        result = []
+        for w_index in range(len(models[0].weights)):
+            # weight matrix shape
+            n = np.prod(models[0].weights[w_index].shape)
+
+            # reshape weight matrices into single vectors and stack them
+            stacked = np.stack([model.weights[w_index].reshape((n,)) for model in models])
+
+            # compute std deviation among all individual weights and append their mean into result
+            result.append(stacked.std(axis=0).mean())
+
+        return np.array(result)
+
     @classmethod
     def crossover(
         cls, parent1: "NumpyModel", parent2: "NumpyModel", inclination: float, mutation: float
@@ -292,8 +310,10 @@ def train():
                 new_generation.extend(children)
 
             populations.append(new_generation)
-            diversity = np.array([i.std() for i in new_generation])
-            print("Average diversity per weight matrix in new population:", diversity.mean(0))
+            std = np.array([i.std() for i in new_generation])
+            print("Average std. deviation per weight matrix in new population:", std.mean(axis=0))
+            diversity = NumpyModel.diversity(new_generation)
+            print("Diversity in weight matrices in new population:", diversity)
 
 
 def test():
