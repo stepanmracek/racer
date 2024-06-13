@@ -41,7 +41,6 @@ def main():
     frame_limit = args.timelimit * 30
     frame = 0
     while frame < frame_limit:
-
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 return
