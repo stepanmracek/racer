@@ -280,6 +280,7 @@ def test():
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
     arg_parser.add_argument("--timelimit", default=60, type=int)
     arg_parser.add_argument("--scorelimit", default=10, type=int)
+    arg_parser.add_argument("--seed", default=None, type=int)
     args = arg_parser.parse_args(sys.argv[2:])
 
     pg.init()
@@ -287,6 +288,7 @@ def test():
     pg.display.set_caption("Racer")
     clock = pg.Clock()
 
+    random.seed(args.seed)
     world = World.create(level=args.level)
     model = NumpyModel.load(args.model)
     car_keys = init_keys()
@@ -296,6 +298,7 @@ def test():
     fitness = 0.0
     red_prev_diamond = None
     blue_prev_diamond = None
+    fps = 30
     while frame < frame_limit:
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -306,6 +309,16 @@ def test():
             world.reset()
             fitness = 0.0
             frame = 0
+        elif (
+            just_pressed_keys[pg.K_PLUS]
+            or just_pressed_keys[pg.K_EQUALS]
+            or just_pressed_keys[pg.K_KP_PLUS]
+        ):
+            fps += 5
+            print(fps)
+        elif just_pressed_keys[pg.K_MINUS] or just_pressed_keys[pg.K_KP_MINUS]:
+            fps = max(5, fps - 5)
+            print(fps)
 
         step_outcome = world.step(
             red_up=car_keys["red"]["u"],
@@ -335,7 +348,7 @@ def test():
         pg.display.update()
         frame += 1
 
-        clock.tick(30)
+        clock.tick(fps)
 
         model_input = np.array(
             [
