@@ -1,3 +1,4 @@
+import csv
 import random
 import sys
 from argparse import ArgumentParser
@@ -32,6 +33,9 @@ class NumpyModel:
                 (1.0 - intensity) * w + intensity * np.random.normal(scale=std, size=w.shape)
             )
         return NumpyModel(new_weights)
+
+    def random(self) -> "NumpyModel":
+        return NumpyModel([np.random.normal(scale=w.std(), size=w.shape) for w in self.weights])
 
     def std(self):
         return tuple(w.std() for w in self.weights)
@@ -134,66 +138,72 @@ class EvaluateParams:
     order: int
     seed: int
     model: NumpyModel
+    runs: int
 
 
 def evaluate_model(params: EvaluateParams):
     global world
     random.seed(params.seed)
-    world.reset()
-    car_keys = init_keys()
     fitness = 0.0
-    red_prev_diamond = None
-    blue_prev_diamond = None
-    for frame in range(60 * 30):
-        step_outcome = world.step(
-            red_up=car_keys["red"]["u"],
-            red_down=car_keys["red"]["d"],
-            red_left=car_keys["red"]["l"],
-            red_right=car_keys["red"]["r"],
-            blue_up=car_keys["blue"]["u"],
-            blue_down=car_keys["blue"]["d"],
-            blue_left=car_keys["blue"]["l"],
-            blue_right=car_keys["blue"]["r"],
-        )
+    for run in range(params.runs):
+        world.reset()
+        car_keys = init_keys()
+        red_prev_diamond = None
+        blue_prev_diamond = None
+        for frame in range(60 * 30):
+            step_outcome = world.step(
+                red_up=car_keys["red"]["u"],
+                red_down=car_keys["red"]["d"],
+                red_left=car_keys["red"]["l"],
+                red_right=car_keys["red"]["r"],
+                blue_up=car_keys["blue"]["u"],
+                blue_down=car_keys["blue"]["d"],
+                blue_left=car_keys["blue"]["l"],
+                blue_right=car_keys["blue"]["r"],
+            )
 
-        f1, red_prev_diamond = compute_fitness(
-            world.red_car, *step_outcome.red_car, red_prev_diamond
-        )
-        f2, blue_prev_diamond = compute_fitness(
-            world.blue_car, *step_outcome.blue_car, blue_prev_diamond
-        )
-        fitness += f1 + f2
+            f1, red_prev_diamond = compute_fitness(
+                world.red_car, *step_outcome.red_car, red_prev_diamond
+            )
+            f2, blue_prev_diamond = compute_fitness(
+                world.blue_car, *step_outcome.blue_car, blue_prev_diamond
+            )
+            fitness += f1 + f2
 
-        model_input = np.array(
-            [
-                sensors_to_feature_vec(world.red_car.velocity, step_outcome.red_car[0]),
-                sensors_to_feature_vec(world.blue_car.velocity, step_outcome.blue_car[0]),
-            ],
-            dtype=np.float32,
-        )
-        model_output = params.model(model_input)
-        car_keys = {
-            "red": {
-                "u": model_output[0][0] > 0,
-                "d": model_output[0][1] > 0,
-                "l": model_output[0][2] > 0,
-                "r": model_output[0][3] > 0,
-            },
-            "blue": {
-                "u": model_output[1][0] > 0,
-                "d": model_output[1][1] > 0,
-                "l": model_output[1][2] > 0,
-                "r": model_output[1][3] > 0,
-            },
-        }
+            model_input = np.array(
+                [
+                    sensors_to_feature_vec(world.red_car.velocity, step_outcome.red_car[0]),
+                    sensors_to_feature_vec(world.blue_car.velocity, step_outcome.blue_car[0]),
+                ],
+                dtype=np.float32,
+            )
+            model_output = params.model(model_input)
+            car_keys = {
+                "red": {
+                    "u": model_output[0][0] > 0,
+                    "d": model_output[0][1] > 0,
+                    "l": model_output[0][2] > 0,
+                    "r": model_output[0][3] > 0,
+                },
+                "blue": {
+                    "u": model_output[1][0] > 0,
+                    "d": model_output[1][1] > 0,
+                    "l": model_output[1][2] > 0,
+                    "r": model_output[1][3] > 0,
+                },
+            }
     return params.order, fitness
 
 
 def train():
     arg_parser = ArgumentParser(prog="train_ga.py train")
+    arg_parser.add_argument("--processes", type=int)
     arg_parser.add_argument("--initial-model", required=True)
+    arg_parser.add_argument("--initial-random-weights", action="store_true")
     arg_parser.add_argument("--output-model-prefix", required=True)
+    arg_parser.add_argument("--full-fitness-output", action="store_true")
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
+    arg_parser.add_argument("--runs", type=int, default=1)
     arg_parser.add_argument("--initial-population-size", type=int, default=200)
     arg_parser.add_argument("--elite-count", type=int, default=20)
     arg_parser.add_argument("--parents-count", type=int, default=40)
@@ -204,16 +214,25 @@ def train():
 
     initial_model = NumpyModel.load(args.initial_model)
     first_generation: list[NumpyModel] = []
-    for mutation_intensity in np.linspace(0.0, 0.75, num=args.initial_population_size):
-        first_generation.append(initial_model.mutate(mutation_intensity))
+    if args.initial_random_weights:
+        first_generation = [initial_model.random() for _ in range(args.initial_population_size)]
+    else:
+        for mutation_intensity in np.linspace(0.0, 0.75, num=args.initial_population_size):
+            first_generation.append(initial_model.mutate(mutation_intensity))
+
+    if args.full_fitness_output:
+        fitness_file = open(f"{args.output_model_prefix}fitness.csv", "wt")
+        csv_writer = csv.writer(fitness_file)
+    else:
+        csv_writer = None
 
     populations = [first_generation]
-    with Pool(initializer=process_init, initargs=(args.level,)) as pool:
+    with Pool(processes=args.processes, initializer=process_init, initargs=(args.level,)) as pool:
         for generation_index in count():
             population = populations[-1]
 
             params = [
-                EvaluateParams(order=i, seed=generation_index, model=model)
+                EvaluateParams(order=i, seed=generation_index, model=model, runs=args.runs)
                 for i, model in enumerate(population)
             ]
             results = list(
@@ -241,6 +260,9 @@ def train():
             print(
                 f"Best fitness: {best_fitness:.2f}; worst fitness: {worst_fitness}; average fitness: {avg_fitness}"
             )
+            if csv_writer:
+                csv_writer.writerow([i[1] for i in sorted_population])
+                fitness_file.flush()
 
             # create new generation according to the hyper-params
             new_generation: list[NumpyModel] = []
