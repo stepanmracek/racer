@@ -1,11 +1,15 @@
 import csv
+import glob
+import os
 import random
 import sys
 from argparse import ArgumentParser
+from collections import Counter
 from dataclasses import dataclass
+from enum import IntEnum
 from itertools import count
 from multiprocessing import Pool
-from typing import Optional
+from typing import Optional, TypeVar
 
 import msgpack
 import numpy as np
@@ -14,6 +18,8 @@ from tqdm import tqdm
 
 from world import World
 from car import Car, StepOutcome, SensorReadings
+
+FPS = 30
 
 
 @dataclass
@@ -168,7 +174,7 @@ def evaluate_model(params: EvaluateParams):
         car_keys = init_keys()
         red_prev_diamond = None
         blue_prev_diamond = None
-        for frame in range(60 * 30):
+        for frame in range(60 * FPS):
             step_outcome = world.step(
                 red_up=car_keys["red"]["u"],
                 red_down=car_keys["red"]["d"],
@@ -211,6 +217,74 @@ def evaluate_model(params: EvaluateParams):
                 },
             }
     return params.order, fitness
+
+
+@dataclass(slots=True)
+class CompetitionParams:
+    order: int
+    seed: int
+    timelimit: int
+    scorelimit: int
+    red_model: NumpyModel
+    blue_model: NumpyModel
+
+
+class CompetitionResult(IntEnum):
+    RED = 1
+    DRAW = 0
+    BLUE = -1
+
+
+def competition(params: CompetitionParams) -> CompetitionResult:
+    global world
+    random.seed(params.seed)
+
+    def model_input(car: Car, sensors: SensorReadings) -> np.ndarray:
+        feature_vec = sensors_to_feature_vec(car.velocity, sensors)
+        return np.array([feature_vec], dtype=np.float32)
+
+    world.reset()
+    car_keys = init_keys()
+    for frame in range(params.timelimit * FPS):
+        step_outcome = world.step(
+            red_up=car_keys["red"]["u"],
+            red_down=car_keys["red"]["d"],
+            red_left=car_keys["red"]["l"],
+            red_right=car_keys["red"]["r"],
+            blue_up=car_keys["blue"]["u"],
+            blue_down=car_keys["blue"]["d"],
+            blue_left=car_keys["blue"]["l"],
+            blue_right=car_keys["blue"]["r"],
+        )
+
+        if world.red_car.score >= params.scorelimit:
+            return CompetitionResult.RED
+        elif world.blue_car.score >= params.scorelimit:
+            return CompetitionResult.BLUE
+
+        red_model_output = params.red_model(model_input(world.red_car, step_outcome.red_car[0]))
+        blue_model_output = params.red_model(model_input(world.blue_car, step_outcome.blue_car[0]))
+        car_keys = {
+            "red": {
+                "u": red_model_output[0][0] > 0,
+                "d": red_model_output[0][1] > 0,
+                "l": red_model_output[0][2] > 0,
+                "r": red_model_output[0][3] > 0,
+            },
+            "blue": {
+                "u": blue_model_output[0][0] > 0,
+                "d": blue_model_output[0][1] > 0,
+                "l": blue_model_output[0][2] > 0,
+                "r": blue_model_output[0][3] > 0,
+            },
+        }
+
+    if world.red_car.score > world.blue_car.score:
+        return CompetitionResult.RED
+    elif world.red_car.score < world.blue_car.score:
+        return CompetitionResult.BLUE
+    else:
+        return CompetitionResult.DRAW
 
 
 def train():
@@ -335,12 +409,12 @@ def test():
     model = NumpyModel.load(args.model)
     car_keys = init_keys()
 
-    frame_limit = args.timelimit * 30
+    fps = FPS
+    frame_limit = args.timelimit * fps
     frame = 0
     fitness = 0.0
     red_prev_diamond = None
     blue_prev_diamond = None
-    fps = 30
     while frame < frame_limit:
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -417,8 +491,57 @@ def test():
     pg.quit()
 
 
+T = TypeVar("T")
+
+
+def competition_pairs(competitors: list[T]):
+    n = len(competitors)
+    for i in range(0, n - 1):
+        for j in range(i + 1, n):
+            yield competitors[i], competitors[j]
+
+
+def tournament():
+    arg_parser = ArgumentParser(prog="train_ga.py tournament")
+    arg_parser.add_argument("--model-dir", required=True)
+    arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
+    arg_parser.add_argument("--timelimit", default=60, type=int)
+    arg_parser.add_argument("--scorelimit", default=10, type=int)
+    args = arg_parser.parse_args(sys.argv[2:])
+
+    models_paths = sorted(glob.glob(args.model_dir + os.path.sep + "*.np"))
+    models = [(path, NumpyModel.load(path)) for path in tqdm(models_paths, desc="Loading models")]
+    pairs = list(competition_pairs(models))
+    params = [
+        CompetitionParams(
+            order=i,
+            seed=i,
+            timelimit=args.timelimit,
+            scorelimit=args.scorelimit,
+            red_model=red[1],
+            blue_model=blue[1],
+        )
+        for i, (red, blue) in enumerate(pairs)
+    ]
+
+    with Pool(initializer=process_init, initargs=(args.level,)) as pool:
+        results = [r for r in tqdm(pool.imap(competition, params), total=len(params))]
+
+    rankings = Counter()
+    for (red, blue), result in zip(pairs, results):
+        if result == CompetitionResult.RED:
+            rankings[red[0]] += 1
+        elif result == CompetitionResult.BLUE:
+            rankings[blue[0]] += 1
+
+    for model, wins in rankings.most_common():
+        print(model, wins)
+
+
 if __name__ == "__main__":
     if sys.argv[1] == "train":
         train()
     elif sys.argv[1] == "test":
         test()
+    elif sys.argv[1] == "tournament":
+        tournament()
