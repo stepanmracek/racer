@@ -395,7 +395,7 @@ def train():
 
 def test():
     arg_parser = ArgumentParser(prog="train_ga.py test")
-    arg_parser.add_argument("--model", required=True, nargs='+')
+    arg_parser.add_argument("--model", required=True, nargs="+")
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
     arg_parser.add_argument("--timelimit", default=60, type=int)
     arg_parser.add_argument("--scorelimit", default=10, type=int)
@@ -478,7 +478,7 @@ def test():
         )
         models_output = np.stack([model(model_input) for model in models])
         # majority vote
-        model_output = np.sum(np.sign(models_output), axis = 0)
+        model_output = np.sum(np.sign(models_output), axis=0)
         car_keys = {
             "red": {
                 "u": model_output[0][0] > 0,

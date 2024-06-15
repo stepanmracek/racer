@@ -44,7 +44,7 @@ class NumpyModel:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--car", default="red", choices=["red", "blue"])
-    parser.add_argument("--model", required=True, nargs='+')
+    parser.add_argument("--model", required=True, nargs="+")
     args = parser.parse_args()
     topic: bytes = args.car.encode() + b"_car"
 
@@ -68,7 +68,7 @@ def main():
         diamants = parse_sensor(sensors, ("d"))
         model_input = np.array([np.concatenate((velocity, walls, diamants))])
         models_output = np.stack([model(model_input)[0] for model in models])
-        model_output = np.sum(np.sign(models_output), axis = 0)
+        model_output = np.sum(np.sign(models_output), axis=0)
 
         keys = {
             "u": bool(model_output[0] > 0),
