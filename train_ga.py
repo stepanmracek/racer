@@ -395,7 +395,7 @@ def train():
 
 def test():
     arg_parser = ArgumentParser(prog="train_ga.py test")
-    arg_parser.add_argument("--model", required=True)
+    arg_parser.add_argument("--model", required=True, nargs='+')
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
     arg_parser.add_argument("--timelimit", default=60, type=int)
     arg_parser.add_argument("--scorelimit", default=10, type=int)
@@ -409,7 +409,7 @@ def test():
 
     random.seed(args.seed)
     world = World.create(level=args.level)
-    model = NumpyModel.load(args.model)
+    models = [NumpyModel.load(p) for p in args.model]
     car_keys = init_keys()
 
     fps = FPS
@@ -476,7 +476,9 @@ def test():
             ],
             dtype=np.float32,
         )
-        model_output = model(model_input)
+        models_output = np.stack([model(model_input) for model in models])
+        # majority vote
+        model_output = np.sum(np.sign(models_output), axis = 0)
         car_keys = {
             "red": {
                 "u": model_output[0][0] > 0,

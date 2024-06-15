@@ -44,7 +44,7 @@ class NumpyModel:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--car", default="red", choices=["red", "blue"])
-    parser.add_argument("--model", required=True)
+    parser.add_argument("--model", required=True, nargs='+')
     args = parser.parse_args()
     topic: bytes = args.car.encode() + b"_car"
 
@@ -57,7 +57,7 @@ def main():
     publisher: zmq.Socket = context.socket(zmq.PUB)
     publisher.bind(f"tcp://localhost:{6001 if args.car == 'red' else 6002}")
 
-    model = NumpyModel.load(args.model)
+    models = [NumpyModel.load(p) for p in args.model]
 
     while True:
         readings = msgpack.loads(subscriber.recv()[len(topic) :])
@@ -67,7 +67,8 @@ def main():
         walls = parse_sensor(sensors, ("w", "e"))
         diamants = parse_sensor(sensors, ("d"))
         model_input = np.array([np.concatenate((velocity, walls, diamants))])
-        model_output = model(model_input)[0]
+        models_output = np.stack([model(model_input)[0] for model in models])
+        model_output = np.sum(np.sign(models_output), axis = 0)
 
         keys = {
             "u": bool(model_output[0] > 0),
