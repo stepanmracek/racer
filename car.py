@@ -3,6 +3,7 @@ import random
 from dataclasses import dataclass, field
 from typing import Optional, Literal
 
+import numba
 import numpy as np
 import pygame as pg
 from tqdm import tqdm
@@ -22,7 +23,7 @@ class StepOutcome:
 @dataclass
 class Sensors:
     masks: dict[int, pg.Mask]
-    rays: dict[int, list[list[tuple[int, int]]]]
+    rays: dict[int, np.ndarray]
 
     @classmethod
     def precompute(cls) -> "Sensors":
@@ -50,7 +51,10 @@ class Sensors:
             )
             mask = pg.mask.from_surface(rotated_sensors_img)
             masks[angle] = mask
-            rays[angle] = [[] for _ in range(0, 360, const.SENSORS_ANGLE_STEP)]
+
+            rays[angle] = np.ones(
+                shape=(360 // const.SENSORS_ANGLE_STEP, sensors_half, 3), dtype=np.int32
+            ) * (-1)
             for i, ray_orientation in enumerate(range(0, 360, const.SENSORS_ANGLE_STEP)):
                 old = (None, None, None)
                 radians = math.radians(angle + ray_orientation)
@@ -59,6 +63,7 @@ class Sensors:
                 distance = 0
                 x = sensors_half
                 y = sensors_half
+                ray_vals = []
                 while distance < sensors_half:
                     if x < 0.0 or y < 0.0 or x >= const.SENSORS_SIZE or y >= const.SENSORS_SIZE:
                         break
@@ -67,13 +72,35 @@ class Sensors:
 
                     new = (int(x) - sensors_half, int(y) - sensors_half, distance)
                     if new[:2] != old[:2]:
-                        rays[angle][i].append(new)
+                        ray_vals.append(new)
                         old = new
                     x = x + dx
                     y = y + dy
                     distance += 1
 
+                rays[angle][i][: len(ray_vals), :] = np.array(ray_vals, dtype=np.int32)
+
         return Sensors(masks=masks, rays=rays)
+
+
+@numba.njit
+def wall_collision(collision_matrix: np.ndarray, sensors_rays: np.ndarray, car_x, car_y):
+    readings = np.ones((360 // const.SENSORS_ANGLE_STEP,), dtype=np.int32) * -1
+
+    # wall collisions
+    collision_width, colision_height = collision_matrix.shape
+    for i, ray in enumerate(sensors_rays):
+        for x, y, distance in ray:
+            x = x + car_x
+            y = y + car_y
+            if x < 0 or y < 0 or x > collision_width or y > colision_height or distance == -1:
+                break
+
+            if collision_matrix[x, y]:
+                readings[i] = distance
+                break
+
+    return readings
 
 
 @dataclass
@@ -269,22 +296,12 @@ class Car:
         diamond_coords: set[tuple[int, int]],
     ) -> SensorReadings:
         m: pg.Mask = self.sensors.masks[self.angle]
-        readings = [None for _ in range(0, 360, const.SENSORS_ANGLE_STEP)]
-
-        # wall collisions
-        collision_width, colision_height = collision_matrix.shape
-        self_x = int(self.x)
-        self_y = int(self.y)
-        for i, ray in enumerate(self.sensors.rays[self.angle]):
-            for x, y, distance in ray:
-                x = x + self_x
-                y = y + self_y
-                if x < 0 or y < 0 or x > collision_width or y > colision_height:
-                    break
-
-                if collision_matrix[x, y]:
-                    readings[i] = ("w", distance)
-                    break
+        readings = [
+            ("w", int(d)) if d >= 0 else None
+            for d in wall_collision(
+                collision_matrix, self.sensors.rays[self.angle], np.int32(self.x), np.int32(self.y)
+            )
+        ]
 
         # other car in range?
         angle_distance = self.is_object_in_range(
