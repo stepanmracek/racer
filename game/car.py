@@ -8,8 +8,8 @@ import numpy as np
 import pygame as pg
 from tqdm import tqdm
 
-import const
-from utils import random_pos
+import game.const as const
+from game.utils import random_pos
 
 SensorReadings = list[Optional[tuple[Literal["w", "d", "e"], int]]]
 

@@ -5,9 +5,9 @@ from typing import Optional
 import numpy as np
 import pygame as pg
 
-import const
-from car import Car, Sensors, SensorReadings, StepOutcome
-from utils import init_diamonds, random_pos, scale_image
+import game.const as const
+from game.car import Car, Sensors, SensorReadings, StepOutcome
+from game.utils import init_diamonds, random_pos, scale_image
 
 
 @dataclass

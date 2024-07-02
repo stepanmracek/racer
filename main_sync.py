@@ -4,7 +4,7 @@ import msgpack
 import pygame as pg
 import zmq
 
-from world import World
+from game.world import World
 
 
 def main():

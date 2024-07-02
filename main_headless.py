@@ -5,7 +5,7 @@ import pygame as pg
 import zmq
 from tqdm import tqdm
 
-from world import World
+from game.world import World
 
 
 def main():

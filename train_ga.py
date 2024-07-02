@@ -16,8 +16,8 @@ import numpy as np
 import pygame as pg
 from tqdm import tqdm
 
-from world import World
-from car import Car, StepOutcome, SensorReadings
+from game.world import World
+from game.car import Car, StepOutcome, SensorReadings
 
 FPS = 30
 
@@ -291,7 +291,7 @@ def competition(params: CompetitionParams) -> CompetitionResult:
 
 
 def train():
-    arg_parser = ArgumentParser(prog="train_ga.py train")
+    arg_parser = ArgumentParser(prog=f"{sys.argv[0]} train")
     arg_parser.add_argument("--processes", type=int)
     arg_parser.add_argument("--initial-model", required=True)
     arg_parser.add_argument("--initial-random-weights", action="store_true")
@@ -394,7 +394,7 @@ def train():
 
 
 def test():
-    arg_parser = ArgumentParser(prog="train_ga.py test")
+    arg_parser = ArgumentParser(prog=f"{sys.argv[0]} test")
     arg_parser.add_argument("--model", required=True, nargs="+")
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
     arg_parser.add_argument("--timelimit", default=60, type=int)
@@ -507,7 +507,7 @@ def competition_pairs(competitors: list[T]):
 
 
 def tournament():
-    arg_parser = ArgumentParser(prog="train_ga.py tournament")
+    arg_parser = ArgumentParser(prog=f"{sys.argv[0]} tournament")
     arg_parser.add_argument("--processes", type=int)
     arg_parser.add_argument("--models-dir", required=True)
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
@@ -628,10 +628,15 @@ def tournament():
         print(f"  {red_wins}:{blue_wins}")
 
 
-if __name__ == "__main__":
-    if sys.argv[1] == "train":
+def main():
+    if len(sys.argv) < 2:
+        print("Usage:", sys.argv[0], "{train,test,tournament}")
+    elif sys.argv[1] == "train":
         train()
     elif sys.argv[1] == "test":
         test()
     elif sys.argv[1] == "tournament":
         tournament()
+
+if __name__ == "__main__":
+    main()
