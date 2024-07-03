@@ -109,7 +109,7 @@ def sensors_to_feature_vec(velocity: float, sensors: SensorReadings) -> list[flo
     return [velocity] + parse_sensor(sensors, ("w", "e")) + parse_sensor(sensors, ("d",))
 
 
-def compute_fitness(
+def guided_fitness(
     car: Car,
     sensor_readings: SensorReadings,
     step_outcome: StepOutcome,
@@ -145,6 +145,18 @@ def compute_fitness(
     return ans, closest_diamond
 
 
+def raw_fitness(
+    car: Car,
+    sensor_readings: SensorReadings,
+    step_outcome: StepOutcome,
+    prev_step_closest_diamond: Optional[int],
+) -> tuple[float, Optional[int]]:
+    return 1.0 if step_outcome.collected_diamond else 0.0, None
+
+
+FITNESS_FUNCS = {"guided": guided_fitness, "raw": raw_fitness}
+
+
 def init_keys():
     return {
         "red": {"u": False, "d": False, "l": False, "r": False},
@@ -163,6 +175,7 @@ class EvaluateParams:
     seed: int
     model: NumpyModel
     runs: int
+    fitness_func: str
 
 
 def evaluate_model(params: EvaluateParams):
@@ -170,6 +183,7 @@ def evaluate_model(params: EvaluateParams):
     random.seed(params.seed)
     fitness = 0.0
     diamonds = 0
+    fitness_func = FITNESS_FUNCS[params.fitness_func]
     for run in range(params.runs):
         world.reset()
         car_keys = init_keys()
@@ -187,10 +201,10 @@ def evaluate_model(params: EvaluateParams):
                 blue_right=car_keys["blue"]["r"],
             )
 
-            f1, red_prev_diamond = compute_fitness(
+            f1, red_prev_diamond = fitness_func(
                 world.red_car, *step_outcome.red_car, red_prev_diamond
             )
-            f2, blue_prev_diamond = compute_fitness(
+            f2, blue_prev_diamond = fitness_func(
                 world.blue_car, *step_outcome.blue_car, blue_prev_diamond
             )
             fitness += f1 + f2
@@ -305,6 +319,7 @@ def train():
     arg_parser.add_argument("--pairs-select-count", type=int, default=20)
     arg_parser.add_argument("--children-per-pair", type=int, default=9)
     arg_parser.add_argument("--mutation", type=float, default=0.2)
+    arg_parser.add_argument("--fitness", default="guided", choices=list(FITNESS_FUNCS))
     args = arg_parser.parse_args(sys.argv[2:])
 
     initial_model = NumpyModel.load(args.initial_model)
@@ -327,7 +342,13 @@ def train():
             population = populations[-1]
 
             params = [
-                EvaluateParams(order=i, seed=generation_index, model=model, runs=args.runs)
+                EvaluateParams(
+                    order=i,
+                    seed=generation_index,
+                    model=model,
+                    runs=args.runs,
+                    fitness_func=args.fitness,
+                )
                 for i, model in enumerate(population)
             ]
             results = list(
@@ -415,9 +436,6 @@ def test():
     fps = FPS
     frame_limit = args.timelimit * fps
     frame = 0
-    fitness = 0.0
-    red_prev_diamond = None
-    blue_prev_diamond = None
     while frame < frame_limit:
         for event in pg.event.get():
             if event.type == pg.QUIT:
@@ -426,7 +444,6 @@ def test():
         just_pressed_keys = pg.key.get_just_pressed()
         if just_pressed_keys[pg.K_r]:
             world.reset()
-            fitness = 0.0
             frame = 0
         elif (
             just_pressed_keys[pg.K_PLUS]
@@ -449,14 +466,6 @@ def test():
             blue_left=car_keys["blue"]["l"],
             blue_right=car_keys["blue"]["r"],
         )
-
-        f1, red_prev_diamond = compute_fitness(
-            world.red_car, *step_outcome.red_car, red_prev_diamond
-        )
-        f2, blue_prev_diamond = compute_fitness(
-            world.blue_car, *step_outcome.blue_car, blue_prev_diamond
-        )
-        fitness += f1 + f2
 
         if world.red_car.score >= args.scorelimit or world.blue_car.score >= args.scorelimit:
             break
@@ -511,6 +520,7 @@ def tournament():
     arg_parser.add_argument("--processes", type=int)
     arg_parser.add_argument("--models-dir", required=True)
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
+    arg_parser.add_argument("--fitness", default="guided", choices=list(FITNESS_FUNCS))
     arg_parser.add_argument("--timelimit", default=60, type=int)
     arg_parser.add_argument("--scorelimit", default=10, type=int)
     arg_parser.add_argument("--qualification-runs", default=10, type=int)
@@ -528,7 +538,11 @@ def tournament():
             # Run each model alon qualification_runs times
             qualification_params = [
                 EvaluateParams(
-                    order=i, seed=args.qualification_seed, model=model, runs=args.qualification_runs
+                    order=i,
+                    seed=args.qualification_seed,
+                    model=model,
+                    runs=args.qualification_runs,
+                    fitness_func=args.fitness,
                 )
                 for i, (_, model) in enumerate(models)
             ]
@@ -637,6 +651,7 @@ def main():
         test()
     elif sys.argv[1] == "tournament":
         tournament()
+
 
 if __name__ == "__main__":
     main()
