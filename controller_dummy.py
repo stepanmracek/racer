@@ -21,7 +21,10 @@ def main():
 
     keys = msgpack.packb({"u": False, "d": False, "l": False, "r": False})
     while True:
-        subscriber.recv()
+        sensor_readings = subscriber.recv()
+        # Do something with sensor_readings
+        # ...
+        # ...
         publisher.send(keys)
 
 

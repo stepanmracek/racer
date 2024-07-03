@@ -65,8 +65,8 @@ def main():
         velocity = np.array([readings["velocity"]], dtype=np.float32)
         sensors = readings["sensors"]
         walls = parse_sensor(sensors, ("w", "e"))
-        diamants = parse_sensor(sensors, ("d"))
-        model_input = np.array([np.concatenate((velocity, walls, diamants))])
+        diamonds = parse_sensor(sensors, ("d"))
+        model_input = np.array([np.concatenate((velocity, walls, diamonds))])
         models_output = np.stack([model(model_input)[0] for model in models])
         model_output = np.sum(np.sign(models_output), axis=0)
 

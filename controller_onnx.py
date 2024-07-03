@@ -46,8 +46,8 @@ def main():
         velocity = np.array([readings["velocity"]], dtype=np.float32)
         sensors = readings["sensors"]
         walls = parse_sensor(sensors, ("w", "e"))
-        diamants = parse_sensor(sensors, ("d"))
-        onnx_input = np.array([np.concatenate((velocity, walls, diamants))])
+        diamonds = parse_sensor(sensors, ("d"))
+        onnx_input = np.array([np.concatenate((velocity, walls, diamonds))])
 
         onnx_output = onnx_session.run(["output_0"], {"input": onnx_input})[0][0]
         # print(onnx_output)
