@@ -4,7 +4,7 @@ Racer is a top-down arcade game where two players compete in cars. The goal is t
 
 To run the game, just install (in venv) packages from requirement.txt (`pip install -r requirements.txt`) and run `python main.py`. When it starts, you have two cars spawned on random positions and three diamonds.
 
-Use arrow keys to control the red car and WASD keys to control the blue car. Score (count of collected diamonds). Yellow strip at the bottom shows remaining time. You can adjust the time with `--timelimit` parameter and goal score with `--scorelimit`.
+Use arrow keys to control the red car and WASD keys to control the blue car. Score (count of collected diamonds) is located in the bottom-center part of the screen. Yellow strip at the bottom shows remaining time. You can adjust the time with `--timelimit` parameter and goal score with `--scorelimit`.
 
 ![alt text](docs/game.png)
 
@@ -15,7 +15,7 @@ Cars can be controlled by any remote process. The communication is supplied by [
 ![alt text](docs/sensors.png)
 
 - dark ellipse shows potential reach of the senors
-- there are exactly 24 rays casted from the center of the car distributed evenly by 15 degrees.
+- there are exactly 24 rays casted from the center of the car distributed evenly by 15 degrees in CCW direction.
 - if ray hits any object (diamond, car, obstacle) it is visualized as a color dot
 - if ray doesn't hit anything within sensor range, there is no colored dot
 
@@ -47,7 +47,7 @@ keys = msgpack.packb({"u": True, "d": False, "l": True, "r": False})
 
 Msgpacked dictionary is expected in the incomming message where individual keys correspond to keys controlling the car ("u" means up, "l" means down, ...). Values in the dictionary imply if the key should be pressed or not. Notice that multiple keys can be pressed at the same time, e.g. you can accelerate and steer to the left at the same time. When contradicting keys are pressed (up and down or left and right) at the same time, they are cancelled.
 
-To get the idea what the car "see", you can run *before* running the game. Then you can control the red car directly from the `controller_gui` process. Pressed keys are captured in that window and send via ZeroMQ to the main game process.
+To get the idea what the car "see", you can run GUI visualization of sensors *before* running the game. Then you can control the red car directly from the `controller_gui` process. Pressed keys are captured in that window and send via ZeroMQ to the main game process.
 
 ```bash
 python controller_gui.py --car red &
@@ -60,7 +60,7 @@ There is also a stub python template that you might use to develop your own cont
 
 ### Remote control F.A.Q.
 
-**Q**: Python sucks, I want to implement the controller with something faster, type-safe and better tooling.<br>
+**Q**: Python sucks, I want to implement the controller with something faster, type-safe and with better tooling and ecosystem.<br>
 **A**: Sure, as long as the language you are using has [bindings for ZeroMQ](http://wiki.zeromq.org/bindings:_start), you can use whatever you want.
 
 **Q**: Can I have some inspiration how to implement remote controller?<br>
@@ -72,8 +72,8 @@ python controller_numpy.py --car blue --model research/models/ga/local1/pop200-r
 python main.py
 ```
 
-**Q**: I have very complext model but it is unable to respond on every single sensoric message 30 times per second. Is it a problem?<br>
-**A**: It might not be problem at all. The controller subscriber is [configured](https://libzmq.readthedocs.io/en/zeromq4-x/zmq_setsockopt.html) to `subscriber.setsockopt(zmq.CONFLATE, 1)` which means that it allways receives just the last published message and there is buffering of messages in the queue. At the same time the subscriber in the main game file considers the instruction about pressed keys as long as there is no new message received. You might test it with:
+**Q**: I have very complex model but it is unable to respond on every single sensoric message 30 times per second. Is it a problem?<br>
+**A**: It's not problem at all. The controller subscriber is [configured](https://libzmq.readthedocs.io/en/zeromq4-x/zmq_setsockopt.html) to `subscriber.setsockopt(zmq.CONFLATE, 1)` which means that it allways receives just the last published message and there is no buffering of messages in the socket queue. At the same time the subscriber in the main game file considers the instruction about pressed keys valid as long as there is no new message received. You might test it with:
 
 ```bash
 python controller_gui.py --car red --fps 10 &
