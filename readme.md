@@ -54,7 +54,7 @@ python controller_gui.py --car red &
 python main.py
 ```
 
-![alt text](image.png)
+![alt text](docs/controller.png)
 
 There is also a stub python template that you might use to develop your own controller: `controller_dummy.py`
 
