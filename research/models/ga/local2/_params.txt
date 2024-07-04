@@ -1,0 +1,11 @@
+--initial-model research/models/ga/local1/pop200-runs3-2350.np
+--output-model-prefix research/models/ga/local2/pop400-runs5-
+--runs 5
+--full-fitness-output
+--processes 6
+--fitness raw
+--initial-population-size 400
+--elite-count 30
+--parents-count 60
+--pairs-select-count 37
+--children-per-pair 10
