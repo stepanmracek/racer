@@ -157,8 +157,8 @@ class World:
             self.collision_matrix, self.red_car, self.diamond_coords
         )
         return WorldStepOutcome(
-            red_car=[red_car_readings, red_car_step_outcome],
-            blue_car=[blue_car_readings, blue_car_step_outcome],
+            red_car=(red_car_readings, red_car_step_outcome),
+            blue_car=(blue_car_readings, blue_car_step_outcome),
         )
 
     @classmethod
@@ -180,7 +180,8 @@ class World:
             collision_img = collision_img.convert_alpha()
             spawn_image = spawn_image.convert_alpha()
             diamond_img = diamond_img.convert_alpha()
-            crash_sfx.set_volume(0.5)
+            if crash_sfx:
+                crash_sfx.set_volume(0.5)
 
         background_img.blit(collision_img, (0, 0))
         collision_mask = pg.mask.from_surface(collision_img)

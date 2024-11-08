@@ -1,10 +1,10 @@
 from argparse import ArgumentParser
 
-import msgpack
 import pygame as pg
 import zmq
 from tqdm import tqdm
 
+from game.communication import ControlMessage, create_readings_message, parse_control_message
 from game.world import World
 
 
@@ -29,7 +29,7 @@ def main():
     blue_subscriber.connect("tcp://localhost:6001")
     blue_subscriber.setsockopt(zmq.SUBSCRIBE, b"")
 
-    car_keys = {
+    car_keys: dict[str, ControlMessage] = {
         "red": {"u": False, "d": False, "l": False, "r": False},
         "blue": {"u": False, "d": False, "l": False, "r": False},
     }
@@ -53,17 +53,14 @@ def main():
             break
 
         publisher.send(
-            b"red_car"
-            + msgpack.packb({"sensors": outcome.red_car[0], "velocity": world.red_car.velocity})
+            create_readings_message(b"red_car", world.red_car.velocity, outcome.red_car[0])
         )
-
         publisher.send(
-            b"blue_car"
-            + msgpack.packb({"sensors": outcome.blue_car[0], "velocity": world.blue_car.velocity})
+            create_readings_message(b"blue_car", world.blue_car.velocity, outcome.blue_car[0])
         )
 
-        car_keys["red"] = msgpack.loads(red_subscriber.recv())
-        car_keys["blue"] = msgpack.loads(blue_subscriber.recv())
+        car_keys["red"] = parse_control_message(red_subscriber.recv())
+        car_keys["blue"] = parse_control_message(blue_subscriber.recv())
 
 
 if __name__ == "__main__":

@@ -67,8 +67,8 @@ There is also a stub python template that you might use to develop your own cont
 **A**: Sure, just look at `controller_numpy.py` and run
 
 ```bash
-python controller_numpy.py --car red --model research/models/ga/local1/pop200-runs3-24* &
-python controller_numpy.py --car blue --model research/models/ga/local1/pop200-runs3-24* &
+python controller_numpy.py --car red --model research/models/ga/local2/pop400-runs5-073* &
+python controller_numpy.py --car blue --model research/models/ga/local2/pop400-runs5-073* &
 python main.py
 ```
 

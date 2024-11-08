@@ -6,6 +6,7 @@ import msgpack
 import pygame as pg
 import zmq
 
+from game.communication import parse_readings_message
 
 def main():
     parser = argparse.ArgumentParser()
@@ -43,7 +44,7 @@ def main():
         if quit_event:
             break
 
-        readings = msgpack.loads(subscriber.recv()[len(topic) :])
+        readings = parse_readings_message(subscriber.recv()[len(topic) :])
         velocity = readings["velocity"]
         pressed_keys = pg.key.get_pressed()
 

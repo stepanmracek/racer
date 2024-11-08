@@ -193,7 +193,7 @@ class Car:
             return StepOutcome(crash_velocity=crash_velocity)
 
         dsize = diamond_mask.get_size()
-        dhw, dhh = dsize[0] / 2, dsize[1] / 2
+        dhw, dhh = dsize[0] // 2, dsize[1] // 2
         collected_diamond = None
         for diamond in diamond_coords:
             if self.collision(new_angle, new_pos, diamond_mask, diamond[0] - dhw, diamond[1] - dhh):
@@ -296,7 +296,7 @@ class Car:
         diamond_coords: set[tuple[int, int]],
     ) -> SensorReadings:
         m: pg.Mask = self.sensors.masks[self.angle]
-        readings = [
+        readings: SensorReadings = [
             ("w", int(d)) if d >= 0 else None
             for d in wall_collision(
                 collision_matrix, self.sensors.rays[self.angle], np.int32(self.x), np.int32(self.y)
@@ -309,7 +309,8 @@ class Car:
         )
         if angle_distance:
             slot = angle_distance[0] // const.SENSORS_ANGLE_STEP
-            if not readings[slot] or angle_distance[1] < readings[slot][1]:
+            record_at_slot = readings[slot]
+            if not record_at_slot or angle_distance[1] < record_at_slot[1]:
                 readings[slot] = ("e", angle_distance[1])
 
         # diamonds in range?
@@ -319,7 +320,8 @@ class Car:
             )
             if angle_distance:
                 slot = angle_distance[0] // const.SENSORS_ANGLE_STEP
-                if not readings[slot] or angle_distance[1] < readings[slot][1]:
+                record_at_slot = readings[slot]
+                if not record_at_slot or angle_distance[1] < record_at_slot[1]:
                     readings[slot] = ("d", angle_distance[1])
 
         return readings

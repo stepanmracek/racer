@@ -6,6 +6,8 @@ import numpy as np
 import onnxruntime
 import zmq
 
+from game.communication import parse_readings_message
+
 
 def parse_sensor(
     sensors: list[Optional[tuple[Literal["w", "d", "e"], int]]], letters, max_val=501.0
@@ -41,7 +43,7 @@ def main():
     onnx_session = onnxruntime.InferenceSession(args.onnx)
 
     while True:
-        readings = msgpack.loads(subscriber.recv()[len(topic) :])
+        readings = parse_readings_message(subscriber.recv()[len(topic) :])
 
         velocity = np.array([readings["velocity"]], dtype=np.float32)
         sensors = readings["sensors"]

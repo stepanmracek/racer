@@ -20,7 +20,7 @@ from game.world import World
 from game.car import Car, StepOutcome, SensorReadings
 
 FPS = 30
-
+world: World
 
 @dataclass
 class NumpyModel:
@@ -335,6 +335,7 @@ def train():
         csv_writer = csv.writer(fitness_file)
     else:
         csv_writer = None
+        fitness_file = None
 
     populations = [first_generation]
     with Pool(processes=args.processes, initializer=process_init, initargs=(args.level,)) as pool:
@@ -376,7 +377,7 @@ def train():
             print(
                 f"Best fitness: {best_fitness:.2f}; worst fitness: {worst_fitness}; average fitness: {avg_fitness}"
             )
-            if csv_writer:
+            if csv_writer and fitness_file:
                 csv_writer.writerow([i[1] for i in sorted_population])
                 fitness_file.flush()
 
