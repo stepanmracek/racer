@@ -10,7 +10,7 @@ Use arrow keys to control the red car and WASD keys to control the blue car. Sco
 
 ## Remote control
 
-Cars can be controlled by any remote process. The communication is supplied by [ZeroMQ](https://zeromq.org/). Each car has 24 distance sensors around that describes their surroundings. You can turn-on the visualization of the sensors by pressing key `T` during the game.
+Cars can be controlled by any remote process. The communication is supplied by [ZeroMQ](https://zeromq.org/). Each car has 24 distance sensors that describes its surroundings. You can turn-on the visualization of the sensors by pressing key `T` during the game.
 
 ![alt text](docs/sensors.png)
 
@@ -30,7 +30,7 @@ where sensoric data are encoded as a list of optional tuples. Each item in the l
 ```py
 [
     ("e", 250), # there is opponent (enemy) 250 pixels directly in front of us
-    ("w", 150), # there us obstacle (wall) 150 pixels away 15 degrees to the left
+    ("w", 150), # there is obstacle (wall) 150 pixels away 15 degrees to the left
     ("d", 120), # there is a diamond 120 pixels away 30 degrees to the keft
     None,       # sensor ray casted 45 degrees to the left did not hit any obstacle
     ...
