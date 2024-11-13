@@ -1,27 +1,12 @@
 import argparse
 from dataclasses import dataclass
-from typing import Literal, Optional
 
 import msgpack
 import numpy as np
 import zmq
 
+from game.common_controller import create_input, output_to_keys
 from game.communication import parse_readings_message
-
-
-def parse_sensor(
-    sensors: list[Optional[tuple[Literal["w", "d", "e"], int]]], letters, max_val=501.0
-):
-    ans = []
-    for s in sensors:
-        if not s:
-            ans.append(1.0)
-            continue
-        if s[0] not in letters:
-            ans.append(1.0)
-            continue
-        ans.append(s[1] / max_val)
-    return np.array(ans, dtype=np.float32)
 
 
 @dataclass
@@ -39,7 +24,9 @@ class NumpyModel:
             unpacker = msgpack.Unpacker(f)
             weights = []
             for shape in unpacker:
-                weights.append(np.frombuffer(next(unpacker), dtype=np.float32).reshape(shape))
+                weights.append(
+                    np.frombuffer(next(unpacker), dtype=np.float32).reshape(shape)
+                )
         return NumpyModel(weights=weights)
 
 
@@ -60,24 +47,13 @@ def main():
     publisher.bind(f"tcp://localhost:{6001 if args.car == 'red' else 6002}")
 
     models = [NumpyModel.load(p) for p in args.model]
+    input_size = models[0].weights[0].shape[0]
 
     while True:
         readings = parse_readings_message(subscriber.recv()[len(topic) :])
-
-        velocity = np.array([readings["velocity"]], dtype=np.float32)
-        sensors = readings["sensors"]
-        walls = parse_sensor(sensors, ("w", "e"))
-        diamonds = parse_sensor(sensors, ("d"))
-        model_input = np.array([np.concatenate((velocity, walls, diamonds))])
+        model_input = create_input(readings, input_size)
         models_output = np.stack([model(model_input)[0] for model in models])
-        model_output = np.sum(np.sign(models_output), axis=0)
-
-        keys = {
-            "u": bool(model_output[0] > 0),
-            "d": bool(model_output[1] > 0),
-            "l": bool(model_output[2] > 0),
-            "r": bool(model_output[3] > 0),
-        }
+        keys = output_to_keys(models_output, logits=True)
         publisher.send(msgpack.packb(keys))
 
 

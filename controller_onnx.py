@@ -1,27 +1,11 @@
 import argparse
-from typing import Literal, Optional
 
 import msgpack
-import numpy as np
 import onnxruntime
 import zmq
 
+from game.common_controller import create_input, output_to_keys
 from game.communication import parse_readings_message
-
-
-def parse_sensor(
-    sensors: list[Optional[tuple[Literal["w", "d", "e"], int]]], letters, max_val=501.0
-):
-    ans = []
-    for s in sensors:
-        if not s:
-            ans.append(1.0)
-            continue
-        if s[0] not in letters:
-            ans.append(1.0)
-            continue
-        ans.append(s[1] / max_val)
-    return np.array(ans, dtype=np.float32)
 
 
 def main():
@@ -41,30 +25,13 @@ def main():
     publisher.bind(f"tcp://localhost:{6001 if args.car == 'red' else 6002}")
 
     onnx_session = onnxruntime.InferenceSession(args.onnx)
+    input_size = onnx_session.get_inputs()[0].shape[1]
 
     while True:
         readings = parse_readings_message(subscriber.recv()[len(topic) :])
-
-        velocity = np.array([readings["velocity"]], dtype=np.float32)
-        sensors = readings["sensors"]
-        walls = parse_sensor(sensors, ("w", "e"))
-        diamonds = parse_sensor(sensors, ("d"))
-        onnx_input = np.array([np.concatenate((velocity, walls, diamonds))])
-
-        onnx_output = onnx_session.run(["output_0"], {"input": onnx_input})[0][0]
-        # print(onnx_output)
-
-        # hack to not stop and wait until the end of the time if we have zero velocity
-        # and the network decides to not move at all
-        if abs(velocity[0]) < 0.1 and onnx_output[0] < 0.5 and onnx_output[1] < 0.5:
-            onnx_output[0] = 1.0
-
-        keys = {
-            "u": bool(onnx_output[0] > 0.5),
-            "d": bool(onnx_output[1] > 0.5),
-            "l": bool(onnx_output[2] > 0.5),
-            "r": bool(onnx_output[3] > 0.5),
-        }
+        onnx_input = create_input(readings, input_size)
+        onnx_output = onnx_session.run(["output_0"], {"input": onnx_input})[0]
+        keys = output_to_keys(onnx_output, logits=False)
         publisher.send(msgpack.packb(keys))
 
 
