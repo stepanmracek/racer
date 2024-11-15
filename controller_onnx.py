@@ -26,11 +26,12 @@ def main():
 
     onnx_session = onnxruntime.InferenceSession(args.onnx)
     input_size = onnx_session.get_inputs()[0].shape[1]
+    output_names = [onnx_session.get_outputs()[0].name]
 
     while True:
         readings = parse_readings_message(subscriber.recv()[len(topic) :])
         onnx_input = create_input(readings, input_size)
-        onnx_output = onnx_session.run(["output_0"], {"input": onnx_input})[0]
+        onnx_output = onnx_session.run(output_names, {"input": onnx_input})[0]
         keys = output_to_keys(onnx_output, logits=False)
         publisher.send(msgpack.packb(keys))
 

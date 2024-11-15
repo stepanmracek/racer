@@ -7,6 +7,7 @@ from typing import Optional
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+import tf2onnx
 from tqdm import tqdm
 
 from game.communication import ControlMessage
@@ -17,13 +18,29 @@ from game.common_controller import create_input, output_to_keys
 FPS = 30
 
 
+def create_optimizer():
+    return tf.keras.optimizers.Adam(learning_rate=0.0001)
+
+
 def create_model():
-    input = tf.keras.Input(shape=(73,), name="input")
+    input = tf.keras.Input(shape=(49,), name="input")
     hidden = tf.keras.layers.Dense(64, activation="tanh", name="hidden1")(input)
     output = tf.keras.layers.Dense(9, activation="softmax", name="output")(hidden)
     model = tf.keras.Model(name="ff_model", inputs=input, outputs=output)
-    model.compile(optimizer="adam", loss="categorical_crossentropy")
+    model.compile(optimizer=create_optimizer(), loss="categorical_crossentropy")
     return model
+
+
+def load_model(path):
+    print("Loading model from:", path)
+    model = tf.keras.models.load_model(path)
+    model.compile(optimizer=create_optimizer(), loss="categorical_crossentropy")
+    return model
+
+
+def save_onnx_model(model, path):
+    spec = (tf.TensorSpec(model.inputs[0].shape, tf.float32, name="input"),)
+    tf2onnx.convert.from_keras(model, input_signature=spec, opset=13, output_path=path)
 
 
 def guided_reward(
@@ -38,12 +55,11 @@ def guided_reward(
     if abs(car.velocity) < 0.1:
         ans -= 1.0
 
-    closest_diamond = min(
-        (r[1] for r in sensor_readings if r and r[0] == "d"), default=None
-    )
+    closest_diamond = min((r[1] for r in sensor_readings if r and r[0] == "d"), default=None)
     # encourage exploring
     if not closest_diamond:
         ans -= -0.2
+    ans += car.velocity
 
     if prev_step_closest_diamond is not None and closest_diamond is not None:
         # encourage approaching to dimaonds
@@ -106,7 +122,7 @@ def compute_future_discounted_reward(rewards: list[float], discount: float):
         future = rewards[i:]
         ans.append(sum((r * discount**k for k, r in enumerate(future)), 0.0))
 
-    return ans
+    # return ans
     return list((np.array(ans) - np.mean(ans)) / np.std(ans))
 
 
@@ -137,7 +153,8 @@ def evaluate_model(world: World, params: EvaluateParams) -> EvaluateResult:
 
     for frame in tqdm(range(60 * FPS), desc=f"Epoch {params.epoch}"):
         model_input = create_input(
-            {"velocity": world.red_car.velocity, "sensors": step_outcome.red_car[0]}, 73
+            {"velocity": world.red_car.velocity, "sensors": step_outcome.red_car[0]},
+            params.model.inputs[0].shape[1],
         )
         model_output = params.model(model_input)
         action_probs = tfp.distributions.Categorical(probs=model_output)
@@ -160,9 +177,7 @@ def evaluate_model(world: World, params: EvaluateParams) -> EvaluateResult:
         actions=actions,
         states=states,
         rewards=rewards,
-        future_discounted_reward=compute_future_discounted_reward(
-            rewards, params.discount
-        ),
+        future_discounted_reward=compute_future_discounted_reward(rewards, params.discount),
     )
 
 
@@ -179,14 +194,15 @@ def train_model(model: tf.keras.Model, result: EvaluateResult):
             log_prob = action_probs.log_prob(a)
             loss += -g * tf.squeeze(log_prob)
 
+    print("Policy gradient ascent")
     gradient = tape.gradient(loss, model.trainable_variables)
     model.optimizer.apply(gradient, model.trainable_variables)
 
 
 def train():
     arg_parser = ArgumentParser(prog=f"{sys.argv[0]} train")
-    # arg_parser.add_argument("--initial-model", required=True)
-    arg_parser.add_argument("--output-model", required=True)
+    arg_parser.add_argument("--initial-model")
+    arg_parser.add_argument("--output-onnx-model-prefix", required=True)
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
     arg_parser.add_argument("--epochs", type=int, default=10)
     arg_parser.add_argument("--reward", default="guided", choices=list(REWARD_FUNCS))
@@ -195,19 +211,18 @@ def train():
     tf.random.set_seed(0)
     np.random.seed(0)
 
+    model = load_model(args.initial_model) if args.initial_model else create_model()
     world = World.create(level=args.level, headless=True)
-    model = create_model()
 
-    for i in range(args.epochs):
+    for epoch in range(args.epochs):
         params = EvaluateParams(
-            epoch=i, seed=i, model=model, reward_func=args.reward, discount=0.99
+            epoch=epoch, seed=epoch, model=model, reward_func=args.reward, discount=0.999
         )
         result = evaluate_model(world, params)
-        print("Reward:", sum(result.rewards))
+        print("Total reward:", sum(result.rewards))
         train_model(model, result)
+        save_onnx_model(model, f"{args.output_onnx_model_prefix}-{epoch + 1:04}.onnx")
         print("-" * 80)
-
-    model.export(args.output_model)
 
 
 def main():
