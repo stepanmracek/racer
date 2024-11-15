@@ -56,7 +56,7 @@ def output_to_keys(output: np.ndarray, logits: bool = False) -> ControlMessage:
             "l": bool(output[0][2] > t),
             "r": bool(output[0][3] > t),
         }
-    elif output_shape[1] == 4:
+    elif len(output_shape) > 1 and output_shape[1] == 4:
         merged_output = np.sum(np.sign(output), axis=0)
         return {
             "u": bool(merged_output[0] > 0),
@@ -66,5 +66,7 @@ def output_to_keys(output: np.ndarray, logits: bool = False) -> ControlMessage:
         }
     elif output_shape == (1, 9):
         return POSSIBLE_KEYS[np.argmax(output[0])]
+    elif output_shape == (1,):
+        return POSSIBLE_KEYS[output[0]]
     else:
         raise RuntimeError(f"Invalid output shape: {output_shape}")
