@@ -10,16 +10,16 @@ import tensorflow_probability as tfp
 import tf2onnx
 from tqdm import tqdm
 
+from game.car import Car, SensorReadings, StepOutcome
+from game.common_controller import create_input, output_to_keys
 from game.communication import ControlMessage
 from game.world import World
-from game.car import Car, StepOutcome, SensorReadings
-from game.common_controller import create_input, output_to_keys
 
 FPS = 30
 
 
 def create_optimizer():
-    return tf.keras.optimizers.Adam(learning_rate=0.0001)
+    return tf.keras.optimizers.Adam(learning_rate=0.001)
 
 
 def create_model():
@@ -32,7 +32,7 @@ def create_model():
 
 
 def load_model(path):
-    print("Loading model from:", path)
+    print("Loading model from:", path, file=sys.stderr)
     model = tf.keras.models.load_model(path)
     model.compile(optimizer=create_optimizer(), loss="categorical_crossentropy")
     return model
@@ -59,10 +59,12 @@ def guided_reward(
     # encourage exploring
     if not closest_diamond:
         ans -= -0.2
-    ans += car.velocity
+
+    if car.velocity > 0:
+        ans += car.velocity
 
     if prev_step_closest_diamond is not None and closest_diamond is not None:
-        # encourage approaching to dimaonds
+        # encourage approaching to diamonds
         if closest_diamond < prev_step_closest_diamond:
             ans += 1.0
         # discourage going away from diamonds
@@ -114,6 +116,7 @@ class EvaluateResult:
     actions: list
     rewards: list
     future_discounted_reward: list
+    diamonds: int
 
 
 def compute_future_discounted_reward(rewards: list[float], discount: float):
@@ -135,6 +138,7 @@ def evaluate_model(world: World, params: EvaluateParams) -> EvaluateResult:
     states = []
     actions = []
     rewards = []
+    diamonds = 0
 
     def step():
         return world.step(
@@ -163,6 +167,9 @@ def evaluate_model(world: World, params: EvaluateParams) -> EvaluateResult:
 
         step_outcome = step()
 
+        if step_outcome.red_car[1].collected_diamond:
+            diamonds += 1
+
         reward, red_prev_diamond = reward_func(
             world.red_car, *step_outcome.red_car, red_prev_diamond
         )
@@ -171,13 +178,14 @@ def evaluate_model(world: World, params: EvaluateParams) -> EvaluateResult:
         actions.append(action)
         rewards.append(reward)
 
-    # rewards[-1] = sum(rewards) ???
+    rewards[-1] = sum(rewards)
 
     return EvaluateResult(
         actions=actions,
         states=states,
         rewards=rewards,
         future_discounted_reward=compute_future_discounted_reward(rewards, params.discount),
+        diamonds=diamonds,
     )
 
 
@@ -194,17 +202,18 @@ def train_model(model: tf.keras.Model, result: EvaluateResult):
             log_prob = action_probs.log_prob(a)
             loss += -g * tf.squeeze(log_prob)
 
-    print("Policy gradient ascent")
+    print("Policy gradient ascent", file=sys.stderr)
     gradient = tape.gradient(loss, model.trainable_variables)
-    model.optimizer.apply(gradient, model.trainable_variables)
+    model.optimizer.apply(gradient)
 
 
 def train():
     arg_parser = ArgumentParser(prog=f"{sys.argv[0]} train")
     arg_parser.add_argument("--initial-model")
-    arg_parser.add_argument("--output-onnx-model-prefix", required=True)
+    arg_parser.add_argument("--output-model", required=True)
+    arg_parser.add_argument("--snapshots-epoch-interval", type=int)
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
-    arg_parser.add_argument("--epochs", type=int, default=10)
+    arg_parser.add_argument("--epochs", type=int, default=10_000_000)
     arg_parser.add_argument("--reward", default="guided", choices=list(REWARD_FUNCS))
     args = arg_parser.parse_args(sys.argv[2:])
 
@@ -212,22 +221,34 @@ def train():
     np.random.seed(0)
 
     model = load_model(args.initial_model) if args.initial_model else create_model()
+    model.optimizer.build(model.trainable_variables)
     world = World.create(level=args.level, headless=True)
 
-    for epoch in range(args.epochs):
-        params = EvaluateParams(
-            epoch=epoch, seed=epoch, model=model, reward_func=args.reward, discount=0.999
-        )
-        result = evaluate_model(world, params)
-        print("Total reward:", sum(result.rewards))
-        train_model(model, result)
-        save_onnx_model(model, f"{args.output_onnx_model_prefix}-{epoch + 1:04}.onnx")
-        print("-" * 80)
+    try:
+        for epoch in range(args.epochs):
+            params = EvaluateParams(
+                epoch=epoch, seed=epoch, model=model, reward_func=args.reward, discount=0.999
+            )
+            result = evaluate_model(world, params)
+            print(
+                f"Epoch: {epoch}; Terminal reward: {result.rewards[-1]}; diamonds: {result.diamonds}",
+                file=sys.stderr,
+            )
+            train_model(model, result)
+
+            next_epoch = epoch + 1
+            if args.snapshots_epoch_interval and (next_epoch % args.snapshots_epoch_interval) == 0:
+                tf.keras.models.save_model(model, f"{args.output_model}-{next_epoch:04}.keras")
+            print("-" * 80, file=sys.stderr)
+    except KeyboardInterrupt:
+        pass
+
+    save_onnx_model(model, f"{args.output_model}.onnx")
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage:", sys.argv[0], "{train}")
+        print("Usage:", sys.argv[0], "{train}", file=sys.stderr)
     elif sys.argv[1] == "train":
         train()
 
