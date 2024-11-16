@@ -19,7 +19,7 @@ FPS = 30
 
 
 def create_optimizer():
-    return tf.keras.optimizers.Adam(learning_rate=0.001)
+    return tf.keras.optimizers.Adam(learning_rate=0.0005)
 
 
 def create_model():
@@ -60,8 +60,10 @@ def guided_reward(
     if not closest_diamond:
         ans -= -0.2
 
-    if car.velocity > 0:
-        ans += car.velocity
+    # This has turned out to be a bad idea - cars just learned to go back and forth without
+    # collecting the diamonds at all...
+    # if car.velocity > 0:
+    #     ans += car.velocity
 
     if prev_step_closest_diamond is not None and closest_diamond is not None:
         # encourage approaching to diamonds
@@ -178,7 +180,8 @@ def evaluate_model(world: World, params: EvaluateParams) -> EvaluateResult:
         actions.append(action)
         rewards.append(reward)
 
-    rewards[-1] = sum(rewards)
+    # I'm not sure if the terminal reward should be somehow distict from the other ongoing rewards
+    # rewards[-1] = sum(rewards)
 
     return EvaluateResult(
         actions=actions,
@@ -212,9 +215,11 @@ def train():
     arg_parser.add_argument("--initial-model")
     arg_parser.add_argument("--output-model", required=True)
     arg_parser.add_argument("--snapshots-epoch-interval", type=int)
+    arg_parser.add_argument("--snapshot-onnx", action="store_true")
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
     arg_parser.add_argument("--epochs", type=int, default=10_000_000)
     arg_parser.add_argument("--reward", default="guided", choices=list(REWARD_FUNCS))
+    arg_parser.add_argument("--discount", default=0.99, type=float)
     args = arg_parser.parse_args(sys.argv[2:])
 
     tf.random.set_seed(0)
@@ -227,18 +232,21 @@ def train():
     try:
         for epoch in range(args.epochs):
             params = EvaluateParams(
-                epoch=epoch, seed=epoch, model=model, reward_func=args.reward, discount=0.999
+                epoch=epoch, seed=epoch, model=model, reward_func=args.reward, discount=args.discount
             )
             result = evaluate_model(world, params)
             print(
-                f"Epoch: {epoch}; Terminal reward: {result.rewards[-1]}; diamonds: {result.diamonds}",
+                f"Epoch: {epoch}; Total reward: {sum(result.rewards)}; diamonds: {result.diamonds}",
                 file=sys.stderr,
             )
             train_model(model, result)
 
             next_epoch = epoch + 1
             if args.snapshots_epoch_interval and (next_epoch % args.snapshots_epoch_interval) == 0:
-                tf.keras.models.save_model(model, f"{args.output_model}-{next_epoch:04}.keras")
+                if args.snapshot_onnx:
+                    save_onnx_model(model, f"{args.output_model}-{next_epoch:04}.onnx")
+                else:
+                    tf.keras.models.save_model(model, f"{args.output_model}-{next_epoch:04}.keras")
             print("-" * 80, file=sys.stderr)
     except KeyboardInterrupt:
         pass
