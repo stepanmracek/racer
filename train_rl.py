@@ -1,5 +1,6 @@
 import random
 import sys
+import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from typing import Optional
@@ -106,6 +107,7 @@ def init_keys() -> dict[str, ControlMessage]:
 @dataclass(slots=True)
 class EvaluateParams:
     epoch: int
+    game_duration: int
     seed: int
     model: tf.keras.Model
     reward_func: str
@@ -157,7 +159,7 @@ def evaluate_model(world: World, params: EvaluateParams) -> EvaluateResult:
     # initial state
     step_outcome = step()
 
-    for frame in tqdm(range(60 * FPS), desc=f"Epoch {params.epoch}"):
+    for frame in tqdm(range(params.game_duration * FPS), desc=f"Epoch {params.epoch}"):
         model_input = create_input(
             {"velocity": world.red_car.velocity, "sensors": step_outcome.red_car[0]},
             params.model.inputs[0].shape[1],
@@ -203,10 +205,11 @@ def train_model(model: tf.keras.Model, result: EvaluateResult):
             probs = model(s)
             action_probs = tfp.distributions.Categorical(probs=probs)
             log_prob = action_probs.log_prob(a)
-            loss += -g * tf.squeeze(log_prob)
+            loss -= g * tf.squeeze(log_prob)
 
-    print("Policy gradient ascent", file=sys.stderr)
+    stamp = time.perf_counter()
     gradient = tape.gradient(loss, model.trainable_variables)
+    print(f"Policy gradient ascent took {time.perf_counter() - stamp}s", file=sys.stderr)
     model.optimizer.apply(gradient)
 
 
@@ -216,6 +219,7 @@ def train():
     arg_parser.add_argument("--output-model", required=True)
     arg_parser.add_argument("--snapshots-epoch-interval", type=int)
     arg_parser.add_argument("--snapshot-onnx", action="store_true")
+    arg_parser.add_argument("--epoch-duration-seconds", type=int, default=15)
     arg_parser.add_argument("--level", default="park", choices=["park", "nyan"])
     arg_parser.add_argument("--epochs", type=int, default=10_000_000)
     arg_parser.add_argument("--reward", default="guided", choices=list(REWARD_FUNCS))
@@ -232,7 +236,12 @@ def train():
     try:
         for epoch in range(args.epochs):
             params = EvaluateParams(
-                epoch=epoch, seed=epoch, model=model, reward_func=args.reward, discount=args.discount
+                epoch=epoch,
+                seed=epoch,
+                model=model,
+                reward_func=args.reward,
+                discount=args.discount,
+                game_duration=args.epoch_duration_seconds,
             )
             result = evaluate_model(world, params)
             print(
