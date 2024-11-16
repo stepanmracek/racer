@@ -65,7 +65,10 @@ def output_to_keys(output: np.ndarray, logits: bool = False) -> ControlMessage:
             "r": bool(merged_output[3] > 0),
         }
     elif output_shape == (1, 9):
-        return POSSIBLE_KEYS[np.argmax(output[0])]
+        # When doing inference, do we want to random sample or select the most probable action?
+        # return POSSIBLE_KEYS[np.argmax(output[0])]
+        action = np.random.choice(list(range(9)), p=output[0])
+        return POSSIBLE_KEYS[action]
     elif output_shape == (1,):
         return POSSIBLE_KEYS[output[0]]
     else:
