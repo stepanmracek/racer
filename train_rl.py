@@ -129,8 +129,10 @@ def compute_future_discounted_reward(rewards: list[float], discount: float):
         future = rewards[i:]
         ans.append(sum((r * discount**k for k, r in enumerate(future)), 0.0))
 
+    # I'm not sure if any batch normalization of discounted future reward is helping or not
     # return ans
-    return list((np.array(ans) - np.mean(ans)) / np.std(ans))
+    # return list((np.array(ans) - np.mean(ans)) / np.std(ans))
+    return list(np.array(ans) / np.std(ans))
 
 
 def evaluate_model(world: World, params: EvaluateParams) -> EvaluateResult:
